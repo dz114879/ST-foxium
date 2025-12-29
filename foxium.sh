@@ -1,41 +1,35 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
 # ========================================
-# Foxium - SillyTavern 综合优化小工具
+# Foxium - SillyTavern 多功能小工具
 # 作者：KKTsN（橘狐） & limcode
-# 适用于 Termux/Android 环境
-# 本工具免费分发于GitHub与Discord 类脑
+# 本工具免费分发于GitHub与Discord类脑
 # ========================================
 
 # 颜色定义
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-MAGENTA='\033[0;35m'
-CYAN='\033[0;36m'
-NC='\033[0m' # No Color
-BOLD='\033[1m'
+RED=$'\033[0;31m'
+GREEN=$'\033[0;32m'
+YELLOW=$'\033[1;33m'
+BLUE=$'\033[0;34m'
+MAGENTA=$'\033[0;35m'
+CYAN=$'\033[0;36m'
+NC=$'\033[0m' # No Color
+BOLD=$'\033[1m'
 
 # 全局变量
 # 获取脚本所在目录 - 针对 Termux 优化
-# 检测是否通过管道执行（curl | bash）
-if [[ "$0" == /proc/self/fd* ]] || [[ "$0" == "bash" ]] || [[ "$0" == "-bash" ]]; then
-    # 通过管道执行，使用当前工作目录
-    SCRIPT_DIR="$(pwd)"
+# 首先尝试使用 realpath（Termux 推荐）
+if command -v realpath >/dev/null 2>&1; then
+    SCRIPT_DIR="$(dirname "$(realpath "$0")")"
 else
-    # 正常执行，尝试获取脚本所在目录
-    if command -v realpath >/dev/null 2>&1; then
-        SCRIPT_DIR="$(dirname "$(realpath "$0")")"
-    else
-        # 备用方法：使用 cd 和 pwd
-        SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-    fi
-    
-    # 如果获取的路径仍然是 /proc/self/fd 或为空，使用当前工作目录
-    if [ -z "$SCRIPT_DIR" ] || [[ "$SCRIPT_DIR" == /proc/self/fd* ]]; then
-        SCRIPT_DIR="$(pwd)"
-    fi
+    # 备用方法：使用 cd 和 pwd
+    SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+fi
+
+# 如果获取的路径是 /proc/self/fd 或为空，使用当前工作目录
+if [ -z "$SCRIPT_DIR" ] || [[ "$SCRIPT_DIR" == /proc/self/fd* ]]; then
+    SCRIPT_DIR="$(pwd)"
+    print_warning "无法确定脚本目录，使用当前工作目录: $SCRIPT_DIR"
 fi
 
 ST_DIR=""
@@ -106,7 +100,17 @@ create_backup() {
     fi
     
     local timestamp=$(date +"%Y%m%d_%H%M%S")
-    local backup_path="${BACKUP_DIR}/${backup_name}_${timestamp}"
+    
+    # 若为文件，自动保留原始文件扩展名；目录则不加扩展名
+    local ext=""
+    if [ -f "$source_file" ]; then
+        local filename="$(basename "$source_file")"
+        if [[ "$filename" == *.* ]]; then
+            ext=".${filename##*.}"
+        fi
+    fi
+    
+    local backup_path="${BACKUP_DIR}/${backup_name}_${timestamp}${ext}"
     
     if [ -d "$source_file" ]; then
         cp -r "$source_file" "$backup_path"
@@ -130,39 +134,71 @@ create_backup() {
 check_st_directory() {
     print_title "检查 SillyTavern 目录"
     
-    # 显示调试信息
-    print_info "脚本所在目录: $SCRIPT_DIR"
-    print_info "当前工作目录: $(pwd)"
-    echo ""
-    
     # 检查常见的 ST 目录名
-    local possible_dirs=("SillyTavern" "sillytavern" "ST" "st" "SillyTavern-git" "SillyTavern-zip")
+    local possible_dirs=("SillyTavern" "sillytavern" "ST" "st")
+    local found_dirs=()
+    local found_ids=()
     
     print_info "正在查找 SillyTavern 目录..."
-    echo ""
     
     for dir in "${possible_dirs[@]}"; do
         local check_path="${SCRIPT_DIR}/${dir}"
-        echo "  检查: $check_path"
         
-        if [ -d "$check_path" ]; then
-            echo "    ${GREEN}✓${NC} 目录存在"
-            # 检查关键文件是否存在
-            if [ -f "${check_path}/server.js" ] && [ -f "${check_path}/package.json" ]; then
-                echo "    ${GREEN}✓${NC} 包含 server.js 和 package.json"
-                print_info "找到有效的 SillyTavern 目录: $check_path"
-                if ask_confirm "是否使用此目录?"; then
-                    ST_DIR="$check_path"
-                    print_success "已设置 ST 目录: $ST_DIR"
-                    return 0
-                fi
-            else
-                echo "    ${RED}✗${NC} 缺少关键文件 (server.js 或 package.json)"
+        if [ -d "$check_path" ] && [ -f "${check_path}/server.js" ] && [ -f "${check_path}/package.json" ]; then
+            # 获取目录唯一标识以去重 (处理Windows等不区分大小写系统的问题)
+            # 优先使用 ls -id 获取 inode
+            local dir_id=$(ls -id "$check_path" 2>/dev/null | awk '{print $1}')
+            
+            # 备选方案：使用 realpath
+            if [ -z "$dir_id" ] && command -v realpath >/dev/null 2>&1; then
+                dir_id=$(realpath "$check_path")
             fi
-        else
-            echo "    ${RED}✗${NC} 目录不存在"
+            
+            # 保底方案：使用路径本身
+            if [ -z "$dir_id" ]; then
+                dir_id="$check_path"
+            fi
+            
+            # 检查是否已存在
+            local is_duplicate=0
+            for existing_id in "${found_ids[@]}"; do
+                if [ "$existing_id" == "$dir_id" ]; then
+                    is_duplicate=1
+                    break
+                fi
+            done
+            
+            if [ $is_duplicate -eq 0 ]; then
+                found_dirs+=("$check_path")
+                found_ids+=("$dir_id")
+            fi
         fi
     done
+    
+    if [ ${#found_dirs[@]} -eq 1 ]; then
+        ST_DIR="${found_dirs[0]}"
+        print_info "找到有效的 SillyTavern 目录: $ST_DIR"
+        print_success "已设置 ST 目录: $ST_DIR"
+        return 0
+    elif [ ${#found_dirs[@]} -gt 1 ]; then
+        print_info "找到多个 SillyTavern 目录:"
+        local i=1
+        for dir in "${found_dirs[@]}"; do
+            echo "$i. $dir"
+            ((i++))
+        done
+        
+        echo -ne "${YELLOW}请选择要使用的目录 [1-${#found_dirs[@]}]: ${NC}"
+        read -r choice
+        
+        if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#found_dirs[@]}" ]; then
+            ST_DIR="${found_dirs[$((choice-1))]}"
+            print_success "已设置 ST 目录: $ST_DIR"
+            return 0
+        else
+            print_error "无效的选择"
+        fi
+    fi
     
     echo ""
     # 未找到，让用户手动输入
@@ -282,15 +318,16 @@ manual_backup() {
     echo "3. 聊天补全预设 (OpenAI Settings)"
     echo "4. 快速回复 (QuickReplies)"
     echo "5. settings.json"
-    echo "6. secrets.json ${RED}(包含敏感信息)${NC}"
+    echo "6. secrets.json ${RED}(包含密钥等敏感信息)${NC}"
     echo "7. config.yaml"
     echo "8. 聊天记录 (chats) ${RED}(可能很大)${NC}"
     echo "9. '为自己安装'扩展 (extensions)"
     echo "10. '为所有人安装'扩展 (third-party)"
-    echo "11. 全部备份"
+    echo "11. 世界书+角色卡+预设+快速回复"
+    echo "12. 全部备份"
     echo "0. 返回主菜单"
     
-    echo -ne "\n${YELLOW}请输入选项 [0-11]: ${NC}"
+    echo -ne "\n${YELLOW}请输入选项 [0-12]: ${NC}"
     read -r choice
     
     case $choice in
@@ -330,7 +367,7 @@ manual_backup() {
             fi
             ;;
         6)
-            print_warning "secrets.json 包含 API 密钥等敏感信息"
+            print_warning "secrets.json 包含 API 密钥等敏感信息，如果有人让你把这个文件发给他，对方百分之一万是骗子！"
             if ask_confirm "确认要备份 secrets.json 吗?"; then
                 if [ -f "${USER_DIR}/secrets.json" ]; then
                     create_backup "${USER_DIR}/secrets.json" "secrets"
@@ -347,7 +384,7 @@ manual_backup() {
             fi
             ;;
         8)
-            print_warning "聊天记录可能占用大量空间"
+            print_warning "请注意，聊天记录可能占用大量空间"
             if ask_confirm "确认要备份聊天记录吗?"; then
                 if [ -d "${USER_DIR}/chats" ]; then
                     create_backup "${USER_DIR}/chats" "chats"
@@ -371,6 +408,14 @@ manual_backup() {
             fi
             ;;
         11)
+            print_info "备份世界书+角色卡+预设+快速回复..."
+            [ -d "${USER_DIR}/worlds" ] && create_backup "${USER_DIR}/worlds" "worlds"
+            [ -d "${USER_DIR}/characters" ] && create_backup "${USER_DIR}/characters" "characters"
+            [ -d "${USER_DIR}/OpenAI Settings" ] && create_backup "${USER_DIR}/OpenAI Settings" "openai_settings"
+            [ -d "${USER_DIR}/QuickReplies" ] && create_backup "${USER_DIR}/QuickReplies" "quick_replies"
+            print_success "备份完成！"
+            ;;
+        12)
             print_info "开始全部备份..."
             [ -d "${USER_DIR}/worlds" ] && create_backup "${USER_DIR}/worlds" "worlds"
             [ -d "${USER_DIR}/characters" ] && create_backup "${USER_DIR}/characters" "characters"
@@ -407,33 +452,67 @@ manual_backup() {
 auto_backup_setup() {
     print_title "自动备份设置"
     
-    print_info "此功能将:"
-    echo "  1. 修改 start.sh，在启动 ST 前自动执行备份"
-    echo "  2. 备份范围包括所有重要数据（世界书、角色卡、设置等）"
-    echo "  3. 每次启动 ST 时自动创建带时间戳的备份"
+    print_info "此功能将修改 start.sh 或 Start.bat，让酒馆启动前自动创建带时间戳的备份。"
     echo ""
-    print_warning "注意事项："
-    echo "  - 启用后，每次启动 ST 都会执行备份，可能略微延长启动时间"
-    echo "  - 备份文件会累积，请定期清理旧备份"
-    echo "  - 若要禁用，需要手动编辑 start.sh 删除备份代码"
+    print_warning "启用后，每次启动 ST 都会执行备份，可能略微延长启动时间；自动备份仅保留最新1个，新备份会覆盖旧备份；仅会备份世界书，角色卡，聊天补全预设，快速回复和settings(含正则和user信息等)。若要禁用，需要手动编辑被修改的文件，删除备份代码"
     echo ""
     
-    local start_sh="${ST_DIR}/start.sh"
+    # 让用户选择环境
+    echo "${BOLD}${CYAN}请选择您的环境:${NC}"
+    echo "1. Termux/Linux (修改 start.sh)"
+    echo "2. Windows (修改 Start.bat)"
+    echo "0. 返回"
+    echo ""
+    echo -ne "${YELLOW}请输入选项 [0-2]: ${NC}"
+    read -r env_choice
     
-    # 检查 start.sh 是否存在
-    if [ ! -f "$start_sh" ]; then
-        print_error "start.sh 不存在: $start_sh"
-        print_info "此功能仅适用于 Linux/Mac 环境的 ST"
+    local target_file=""
+    local is_windows=0
+    
+    case $env_choice in
+        1)
+            target_file="${ST_DIR}/start.sh"
+            is_windows=0
+            ;;
+        2)
+            # 尝试查找 Start.bat 或 start.bat
+            if [ -f "${ST_DIR}/Start.bat" ]; then
+                target_file="${ST_DIR}/Start.bat"
+            elif [ -f "${ST_DIR}/start.bat" ]; then
+                target_file="${ST_DIR}/start.bat"
+            else
+                target_file="${ST_DIR}/Start.bat"
+            fi
+            is_windows=1
+            ;;
+        0)
+            return
+            ;;
+        *)
+            print_error "无效的选项"
+            ask_confirm "按回车键继续..." "y"
+            return
+            ;;
+    esac
+    
+    # 检查目标文件是否存在
+    if [ ! -f "$target_file" ]; then
+        print_error "启动脚本不存在: $target_file"
         echo ""
         ask_confirm "按回车键继续..." "y"
         return 1
     fi
     
     # 检查是否已经启用自动备份
-    if grep -q "# === FOXIUM AUTO BACKUP START ===" "$start_sh"; then
+    local marker="# === FOXIUM AUTO BACKUP START ==="
+    if [ "$is_windows" -eq 1 ]; then
+        marker=":: === FOXIUM AUTO BACKUP START ==="
+    fi
+    
+    if grep -qF "$marker" "$target_file"; then
         print_warning "自动备份已经启用！"
-        print_info "如需禁用，请手动编辑 start.sh 删除备份代码"
-        print_info "备份代码位于 '# === FOXIUM AUTO BACKUP START ===' 和 '# === FOXIUM AUTO BACKUP END ===' 之间"
+        print_info "如需禁用，请手动编辑启动脚本删除备份代码"
+        print_info "备份代码位于 '$marker' 和 '... END ===' 之间"
         echo ""
         ask_confirm "按回车键继续..." "y"
         return 0
@@ -446,14 +525,18 @@ auto_backup_setup() {
         return
     fi
     
-    # 备份 start.sh
-    print_info "备份 start.sh..."
-    create_backup "$start_sh" "start_sh"
+    # 备份启动脚本
+    print_info "备份 $(basename "$target_file")..."
+    create_backup "$target_file" "startup_script"
     
     # 生成备份代码
     print_info "生成备份代码..."
     
-    local backup_code=$(cat <<'EOF'
+    local backup_code=""
+    
+    if [ "$is_windows" -eq 0 ]; then
+        # Linux/Termux 代码
+        backup_code=$(cat <<'EOF'
 
 # === FOXIUM AUTO BACKUP START ===
 # 自动备份功能 - 由 Foxium 添加
@@ -461,7 +544,14 @@ auto_backup_setup() {
 
 echo "执行自动备份..."
 BACKUP_TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-BACKUP_BASE_DIR="$(dirname "$(pwd)")/STbackupF/auto_backup_${BACKUP_TIMESTAMP}"
+BACKUP_PARENT_DIR="$(dirname "$(pwd)")/STbackupF"
+BACKUP_BASE_DIR="${BACKUP_PARENT_DIR}/auto_backup_${BACKUP_TIMESTAMP}"
+
+# 删除旧的自动备份（仅保留最新1个）
+if [ -d "${BACKUP_PARENT_DIR}" ]; then
+    echo "清理旧的自动备份..."
+    find "${BACKUP_PARENT_DIR}" -maxdepth 1 -type d -name "auto_backup_*" -exec rm -rf {} \; 2>/dev/null
+fi
 
 # 创建备份目录
 mkdir -p "${BACKUP_BASE_DIR}"
@@ -481,11 +571,6 @@ backup_if_exists "data/default-user/characters" "characters"
 backup_if_exists "data/default-user/OpenAI Settings" "OpenAI_Settings"
 backup_if_exists "data/default-user/QuickReplies" "QuickReplies"
 backup_if_exists "data/default-user/settings.json" "settings.json"
-backup_if_exists "data/default-user/secrets.json" "secrets.json"
-backup_if_exists "config.yaml" "config.yaml"
-backup_if_exists "data/default-user/chats" "chats"
-backup_if_exists "data/default-user/extensions" "user_extensions"
-backup_if_exists "public/scripts/extensions/third-party" "third_party_extensions"
 
 echo "自动备份完成: ${BACKUP_BASE_DIR}"
 echo ""
@@ -494,34 +579,144 @@ echo ""
 
 EOF
 )
+    else
+        # Windows Batch 代码
+        # 为了兼容性，不使用 cat <<'EOF' 的缩进
+        backup_code=$(cat <<'EOF'
+
+:: === FOXIUM AUTO BACKUP START ===
+:: Auto backup by Foxium (Windows compatible version)
+:: To disable, delete this code block (from START to END marker)
+
+echo.
+echo [INFO] Starting SillyTavern auto backup...
+
+REM Generate timestamp (compatible with new systems)
+for /f %%A in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMdd_HHmmss"') do set BACKUP_TIMESTAMP=%%A
+
+REM Get current directory absolute path
+set "ST_DIR=%~dp0"
+set "BACKUP_PARENT_DIR=%ST_DIR%..\STbackupF"
+set "BACKUP_BASE_DIR=%BACKUP_PARENT_DIR%\auto_backup_%BACKUP_TIMESTAMP%"
+
+REM Delete old auto backups (keep only the latest one)
+if exist "%BACKUP_PARENT_DIR%" (
+    echo [INFO] Cleaning old auto backups...
+    for /d %%D in ("%BACKUP_PARENT_DIR%\auto_backup_*") do (
+        rd /s /q "%%D" 2>nul
+    )
+)
+
+REM Create backup directory
+if not exist "%BACKUP_BASE_DIR%" mkdir "%BACKUP_BASE_DIR%"
+
+REM Backup worlds
+if exist "%ST_DIR%data\default-user\worlds" (
+    echo [INFO] Backing up worlds...
+    xcopy "%ST_DIR%data\default-user\worlds" "%BACKUP_BASE_DIR%\worlds\" /E /Y /I /C /H /R /Q >nul 2>&1
+)
+
+REM Backup characters
+if exist "%ST_DIR%data\default-user\characters" (
+    echo [INFO] Backing up characters...
+    xcopy "%ST_DIR%data\default-user\characters" "%BACKUP_BASE_DIR%\characters\" /E /Y /I /C /H /R /Q >nul 2>&1
+)
+
+REM Backup OpenAI Settings
+if exist "%ST_DIR%data\default-user\OpenAI Settings" (
+    echo [INFO] Backing up OpenAI Settings...
+    xcopy "%ST_DIR%data\default-user\OpenAI Settings" "%BACKUP_BASE_DIR%\OpenAI_Settings\" /E /Y /I /C /H /R /Q >nul 2>&1
+)
+
+REM Backup QuickReplies
+if exist "%ST_DIR%data\default-user\QuickReplies" (
+    echo [INFO] Backing up QuickReplies...
+    xcopy "%ST_DIR%data\default-user\QuickReplies" "%BACKUP_BASE_DIR%\QuickReplies\" /E /Y /I /C /H /R /Q >nul 2>&1
+)
+
+REM Backup settings.json
+if exist "%ST_DIR%data\default-user\settings.json" (
+    echo [INFO] Backing up settings.json...
+    copy "%ST_DIR%data\default-user\settings.json" "%BACKUP_BASE_DIR%\settings.json" /Y >nul 2>&1
+)
+
+echo [INFO] Backup completed: %BACKUP_BASE_DIR%
+echo.
+
+:: === FOXIUM AUTO BACKUP END ===
+
+EOF
+)
+    fi
     
-    # 在 start.sh 中插入备份代码
-    # 找到 "echo \"Entering SillyTavern...\"" 这一行，在它之前插入备份代码
-    print_info "修改 start.sh..."
+    # 插入备份代码
+    print_info "修改 $(basename "$target_file")..."
     
-    # 使用临时文件来处理插入
-    local temp_file="${start_sh}.tmp"
+    local temp_file="${target_file}.tmp"
+    local insert_content_file="${SCRIPT_DIR}/foxium_insert.tmp"
     
-    # 读取文件并在适当位置插入备份代码
-    awk -v backup_code="$backup_code" '
-    /echo "Entering SillyTavern..."/ {
-        print backup_code
-    }
-    { print }
-    ' "$start_sh" > "$temp_file"
+    # 将备份代码写入临时文件，避免 awk 转义问题
+    echo "$backup_code" > "$insert_content_file"
     
-    # 替换原文件
-    if [ $? -eq 0 ]; then
-        mv "$temp_file" "$start_sh"
-        chmod +x "$start_sh"
+    if [ "$is_windows" -eq 0 ]; then
+        # Linux 插入逻辑
+        awk 'FNR==NR { code = code $0 "\n"; next } 
+        /echo "Entering SillyTavern..."/ {
+            printf "%s", code
+        }
+        { print }
+        ' "$insert_content_file" "$target_file" > "$temp_file"
+    else
+        # Windows 插入逻辑（增强版）
+        # 目标：尽可能把备份代码插入到 node server.js（含参数）之前
+        # 回退：若未匹配到 node 行，则插入到第一行（@echo off）之后
+        
+        # 尝试 1：匹配常规 "node server.js"（大小写不敏感，允许前后有内容）
+        awk 'FNR==NR { code = code $0 "\n"; next }
+        BEGIN { IGNORECASE = 1 }
+        /node[[:space:]]+[^\r\n]*server\.js/ {
+            printf "%s", code
+        }
+        { print }
+        ' "$insert_content_file" "$target_file" > "$temp_file"
+        
+        # 如果没有成功插入（临时文件中找不到标记），进行尝试 2：更宽松匹配
+        if ! grep -qF "$marker" "$temp_file"; then
+            awk 'FNR==NR { code = code $0 "\n"; next }
+            BEGIN { IGNORECASE = 1 }
+            /node[[:space:]]+.*server\.js/ {
+                printf "%s", code
+            }
+            { print }
+            ' "$insert_content_file" "$target_file" > "$temp_file"
+        fi
+        
+        # 如果仍未成功，尝试 3：在第一行之后插入（通常为 @echo off）
+        if ! grep -qF "$marker" "$temp_file"; then
+            awk 'FNR==NR { code = code $0 "\n"; next }
+            NR==1 { print; printf "%s", code; next }
+            { print }
+            ' "$insert_content_file" "$target_file" > "$temp_file"
+        fi
+    fi
+    
+    # 清理临时文件
+    rm -f "$insert_content_file"
+    
+    # 最终校验：确认临时文件中确实包含插入的标记
+    if grep -qF "$marker" "$temp_file"; then
+        mv "$temp_file" "$target_file"
+        chmod +x "$target_file"
         print_success "自动备份已启用！"
-        print_info "备份目录: ${BACKUP_DIR}/auto_backup_YYYYMMDD_HHMMSS/"
+        print_info "备份目录: .../STbackupF/auto_backup_YYYYMMDD_HHMMSS/"
         print_info "每次启动 ST 时都会自动创建新的备份"
         echo ""
-        print_warning "若要禁用自动备份，请手动编辑 start.sh"
-        print_info "删除 '# === FOXIUM AUTO BACKUP START ===' 和 '# === FOXIUM AUTO BACKUP END ===' 之间的所有内容"
+        print_warning "若要禁用自动备份，请手动编辑启动脚本"
+        print_info "删除 '$marker' 和 '... END ===' 之间的所有内容"
     else
-        print_error "修改 start.sh 失败"
+        print_error "修改启动脚本失败：未能定位插入点或写入失败"
+        print_info "建议手动将以下代码插入到启动脚本的 'node server.js' 之前："
+        echo "$backup_code"
         rm -f "$temp_file"
     fi
     
@@ -537,10 +732,9 @@ EOF
 fix_npm_install() {
     print_title "修复 npm 安装问题"
     
-    print_info "此功能将:"
-    echo "  1. 备份并删除 node_modules 和 package-lock.json"
-    echo "  2. 使用淘宝镜像源重新执行 npm install"
-    echo "  本功能适用于因node包等问题而无法启动酒馆的情况，典型报错信息为cannot find package..."
+    print_info "此功能将备份并删除 node_modules 和 package-lock.json，使用淘宝镜像源重新执行 npm install"
+    echo ""
+    echo "  适用于因node包等问题而无法启动酒馆的情况，典型报错信息为cannot find package..."
     echo ""
     
     if ! ask_confirm "确认执行此操作吗?"; then
@@ -586,10 +780,7 @@ fix_npm_install() {
 fix_theme_freeze() {
     print_title "修复 UI 主题卡死问题"
     
-    print_info "此功能将:"
-    echo "  1. 备份 settings.json"
-    echo "  2. 将主题设置为 'Dark Lite'"
-    echo "  当选择了不兼容或已删除的UI主题(美化)时，酒馆可能会卡死在网页加载期间，无法以正常方式进入并修改美化。本功能在酒馆外部修改美化为默认的Dark Lite"
+    print_info "当选择了不兼容或已删除的UI主题(美化)时，酒馆可能会卡死在网页加载期间，无法以正常方式进入并修改美化。本功能在酒馆外部修改美化为默认的Dark Lite"
     echo ""
     
     if ! ask_confirm "确认执行此操作吗?"; then
@@ -628,8 +819,9 @@ fix_theme_freeze() {
 fix_extension_uninstall() {
     print_title "修复扩展无法卸载"
     
-    print_info "此功能将列出所有已安装的扩展，您可以选择删除。适用于删除Zerxzlib等因漏洞而无法在酒馆内正常卸载的扩展"
-    echo ""
+    print_info "此功能将列出所有已安装的扩展，您可以选择删除。"
+    
+    echo "适用于删除Zerxzlib等因程序漏洞而无法在酒馆内正常卸载的扩展。"
     
     local user_ext_dir="${USER_DIR}/extensions"
     local third_party_dir="${ST_DIR}/public/scripts/extensions/third-party"
@@ -648,7 +840,7 @@ fix_extension_uninstall() {
         for ext in "$user_ext_dir"/*/ ; do
             if [ -d "$ext" ]; then
                 local ext_name=$(basename "$ext")
-                echo "  $index. $ext_name ${BLUE}(用户扩展)${NC}"
+                echo "  $index. $ext_name"
                 extensions[$index]="$ext_name"
                 ext_paths[$index]="$ext"
                 ((index++))
@@ -663,7 +855,7 @@ fix_extension_uninstall() {
         for ext in "$third_party_dir"/*/ ; do
             if [ -d "$ext" ]; then
                 local ext_name=$(basename "$ext")
-                echo "  $index. $ext_name ${MAGENTA}(第三方扩展)${NC}"
+                echo "  $index. $ext_name"
                 extensions[$index]="$ext_name"
                 ext_paths[$index]="$ext"
                 ((index++))
@@ -820,10 +1012,9 @@ fix_port_conflict() {
 fix_chat_loading() {
     print_title "修复无法打开聊天导致卡死"
     
-    print_info "此功能将:"
-    echo "  1. 禁用自动加载聊天 (settings.json)"
-    echo "  2. 启用角色懒加载 (config.yaml)"
-    echo "  当某个聊天记录损坏或过大时，可能导致酒馆卡死，无法正常进入以删除聊天。此功能可以防止自动加载问题聊天。"
+    print_info "此功能将禁用自动加载聊天 (settings.json)并启用角色懒加载 (config.yaml)"
+    echo ""
+    echo "  当某个聊天记录损坏或过大时，可能导致酒馆卡死，无法正常打开。此功能可以防止自动加载问题聊天，允许你进入酒馆并手动删除之。"
     echo ""
     
     if ! ask_confirm "确认执行此操作吗?"; then
@@ -892,11 +1083,10 @@ fix_chat_loading() {
 fix_gemini3_media() {
     print_title "修复 gemini-3 系列模型无法发送媒体"
     
-    print_risk "这是一个风险操作！"
-    print_info "此功能将:"
-    echo "  在 openai.js 中直接添加 gemini-3 系列模型的媒体支持，允许使用旧版本酒馆向此系列模型发送音频，视频和图片"
+    print_risk "警告！这是一个风险操作"
+    print_info "此功能将在public/scripts/openai.js 中将Gemini-3系列模型加入白名单，允许使用旧版本酒馆向此系列模型发送音频，视频和图片"
     echo ""
-    print_warning "此操作会直接修改 ST 核心文件，可能导致不可预期的问题"
+    print_warning "此操作会直接修改 ST 核心文件，若出现问题，请自行使用备份文件恢复"
     echo ""
     
     if ! ask_confirm "确认执行此风险操作吗?"; then
@@ -981,11 +1171,9 @@ fix_gemini3_media() {
 force_update_st() {
     print_title "强制更新 SillyTavern"
     
-    print_info "此功能将:"
-    echo "  1. 检查 ST 是否为 git 安装版本"
-    echo "  2. 切换到 release 稳定分支"
-    echo "  3. 执行强制更新 (git pull --rebase --autostash)"
+    print_info "此功能将先将酒馆切换到 release 稳定分支（防止酒馆在什么master,main等等奇奇怪怪的分支上），然后git pull --rebase --autostash，覆盖本地修改，强制更新。"
     echo ""
+    echo "适用于酒馆因分支错误或本地有未合并的修改而无法更新的情况。"
     print_warning "此操作会覆盖本地修改，请确保已备份重要数据"
     echo ""
     
@@ -996,9 +1184,9 @@ force_update_st() {
     
     # 检查是否为 git 仓库
     if [ ! -d "${ST_DIR}/.git" ]; then
-        print_error "ST 目录不是 git 仓库"
-        print_info "此功能仅适用于通过 git 安装的 SillyTavern"
-        print_info "如果您使用的是 zip 包安装，请手动下载最新版本"
+        print_error "酒馆目录不是 git 仓库！"
+        echo ""
+        print_info "此功能仅适用于通过 git 安装的 SillyTavern。如果您使用的是 zip 包安装，请手动下载最新版本。"
         echo ""
         ask_confirm "按回车键继续..." "y"
         return 1
@@ -1052,16 +1240,13 @@ force_update_st() {
 # 优化功能
 # ========================================
 
-# 优化功能 1: 优化旧版本 ST 内存占用
+# 修复功能 7 (原优化功能1): 优化旧版本 ST 内存占用
 optimize_memory_usage() {
     print_title "优化旧版本 ST 内存占用"
     
-    print_info "此功能将:"
-    echo "  1. 检查 ST 版本"
-    echo "  2. 如果版本 < 1.13.5，则优化内存占用"
-    echo "  3. 修改 users.js 和 characters.js 文件"
-    echo "  本功能通过添加 expiredInterval: 0 配置来优化旧版本ST的内存占用"
+    print_info "此功能将修改 src/users.js 和 src/endpoints/characters.js 文件，通过添加 expiredInterval: 0 配置禁用定期过期项目检查，优化旧版酒馆的内存占用"
     echo ""
+    echo "适用于1.13.4及之前版本酒馆频繁出现爆内存（JavaScript heap out of memory）问题，导致崩溃的情况"
     
     if ! ask_confirm "确认执行此操作吗?"; then
         print_info "操作已取消"
@@ -1175,10 +1360,9 @@ optimize_memory_usage() {
 remove_chat_size_limit() {
     print_title "解除聊天记录文件大小限制"
     
-    print_info "此功能将:"
-    echo "  1. 备份 server-main.js"
-    echo "  2. 将 bodyParser 的 limit 从 500mb 改为 9999mb"
-    echo "  本功能可以解除聊天记录文件大小限制，允许更大的聊天记录"
+    print_info "此功能将server-main.js中bodyParser的limit从500mb改为9999mb，从而解除聊天记录大小限制，允许酒馆加载更大的聊天记录而不崩溃"
+    echo ""
+    echo "  适用于某些插件导致聊天记录变得超大的时候"
     echo ""
     
     if ! ask_confirm "确认执行此操作吗?"; then
@@ -1247,11 +1431,7 @@ remove_chat_size_limit() {
 update_model_list() {
     print_title "更新聊天补全模型列表"
     
-    print_info "此功能将:"
-    echo "  1. 在 index.html 中添加最新的 Google Gemini 模型"
-    echo "  2. 在 index.html 中添加最新的 Claude 模型"
-    echo "  3. 包括 gemini-3 和 gemini-2.5 系列"
-    echo "  4. 包括 claude-opus-4-5、claude-sonnet-4-5、claude-haiku-4-5 系列"
+    print_info "此功能将在 index.html 中添加最新的Gemini和Claude模型，允许旧版本酒馆直接选择gemini 3系列模型或claude 4.5系列模型"
     echo ""
     
     if ! ask_confirm "确认执行此操作吗?"; then
@@ -1327,18 +1507,12 @@ update_model_list() {
 
 # 优化功能 4: 解除所有模型能力限制
 remove_model_restrictions() {
-    print_title "解除所有模型能力限制"
+    print_title "强解所有模型能力限制"
     
-    print_risk "这是一个风险操作！"
-    print_info "此功能将:"
-    echo "  1. 强制所有模型支持图片内联"
-    echo "  2. 强制所有模型支持视频内联"
-    echo "  3. 修改 openai.js 中的能力检测函数"
+    print_risk "警告！这是一个未经充分测试的风险操作"
+    print_info "修改检查模型是否有多模态能力的函数，让其直接返回true，从而绕过酒馆限制，允许向任意模型发送图片，视频和音频"
     echo ""
-    print_warning "此操作会直接修改 ST 核心文件，可能导致："
-    print_warning "  - 向不支持多模态的模型发送图片/视频时出错"
-    print_warning "  - API 调用失败或产生额外费用"
-    print_warning "  - 不可预期的行为"
+    print_warning "此操作会直接修改 ST 核心文件，可能导致向不支持多模态的模型发送图片/视频时出错，以及其他任何不可预期的错误"
     echo ""
     
     if ! ask_confirm "确认执行此风险操作吗?"; then
@@ -1412,100 +1586,111 @@ remove_model_restrictions() {
     ask_confirm "按回车键继续..." "y"
 }
 
-# 优化功能 5: 一键对局域网开放
-enable_lan_access() {
-    print_title "一键对局域网开放"
+# 优化功能 4: 一键修改内存限制
+modify_memory_limit() {
+    print_title "一键修改内存限制"
     
-    print_risk "这是一个风险操作！"
-    print_info "此功能将:"
-    echo "  1. 启用 listen 模式（允许外部访问）"
-    echo "  2. 添加局域网 IP 段到白名单"
-    echo "  3. 修改 config.yaml 配置"
-    echo ""
-    print_warning "此操作会使 SillyTavern 对局域网开放，可能导致："
-    print_warning "  - 局域网内其他设备可以访问您的 ST"
-    print_warning "  - 潜在的安全风险"
-    print_warning "  - 未授权访问您的聊天记录和配置"
-    echo ""
-    print_info "将添加以下 IP 段到白名单："
-    echo "  - 10.0.0.0/8 (A类私有网络)"
-    echo "  - 172.16.0.0/12 (B类私有网络)"
-    echo "  - 192.168.0.0/16 (C类私有网络)"
+    print_info "此功能将修改 start.sh 或 start.bat 中的内存限制，提高 SillyTavern 可使用的内存上限。如果使用了'优化旧版本 ST 内存占用'后还是频繁出现爆内存问题，可以将内存上限改高"
     echo ""
     
-    if ! ask_confirm "确认执行此风险操作吗?"; then
-        print_info "操作已取消"
-        ask_confirm "按回车键继续..." "y"
-        return
+    # 让用户选择环境
+    echo "${BOLD}${CYAN}请选择您的环境:${NC}"
+    echo "1. Termux/Linux (修改 start.sh)"
+    echo "2. Windows (修改 start.bat)"
+    echo "0. 返回"
+    echo ""
+    echo -ne "${YELLOW}请输入选项 [0-2]: ${NC}"
+    read -r env_choice
+    
+    local start_file=""
+    
+    case $env_choice in
+        1)
+            start_file="${ST_DIR}/start.sh"
+            if [ ! -f "$start_file" ]; then
+                print_error "start.sh 不存在: $start_file"
+                ask_confirm "按回车键继续..." "y"
+                return 1
+            fi
+            ;;
+        2)
+            start_file="${ST_DIR}/start.bat"
+            if [ ! -f "$start_file" ]; then
+                print_error "start.bat 不存在: $start_file"
+                ask_confirm "按回车键继续..." "y"
+                return 1
+            fi
+            ;;
+        0)
+            return
+            ;;
+        *)
+            print_error "无效的选项"
+            ask_confirm "按回车键继续..." "y"
+            return
+            ;;
+    esac
+    
+    # 让用户输入预期内存
+    echo ""
+    print_info "请输入预期内存大小（单位: MB）"
+    print_info "推荐值: 2048 (2GB) - 4096 (4GB)"
+    echo -ne "${YELLOW}请输入内存大小 [默认: 4096]: ${NC}"
+    read -r memory_size
+    
+    if [ -z "$memory_size" ]; then
+        memory_size=4096
     fi
     
-    print_warning "请再次确认：此操作会对局域网开放访问！"
-    if ! ask_confirm "真的要继续吗?"; then
-        print_info "操作已取消"
-        ask_confirm "按回车键继续..." "y"
-        return
-    fi
-    
-    local config_file="${ST_DIR}/config.yaml"
-    
-    if [ ! -f "$config_file" ]; then
-        print_error "config.yaml 不存在: $config_file"
+    # 验证输入是否为数字
+    if ! [[ "$memory_size" =~ ^[0-9]+$ ]]; then
+        print_error "无效的内存大小: $memory_size"
         ask_confirm "按回车键继续..." "y"
         return 1
     fi
     
+    print_info "将内存限制设置为: ${memory_size}MB"
+    
+    if ! ask_confirm "确认修改内存限制吗?"; then
+        print_info "操作已取消"
+        ask_confirm "按回车键继续..." "y"
+        return
+    fi
+    
     # 备份
-    print_info "备份 config.yaml..."
-    create_backup "$config_file" "config"
+    print_info "备份启动脚本..."
+    create_backup "$start_file" "$(basename "$start_file")"
     
-    local success_count=0
+    # 修改文件
+    print_info "修改内存限制..."
     
-    # 修改 listen 设置
-    print_info "启用 listen 模式..."
-    if grep -q "^[[:space:]]*listen:[[:space:]]*false" "$config_file"; then
-        sed -i 's/^[[:space:]]*listen:[[:space:]]*false/listen: true/' "$config_file"
-        if [ $? -eq 0 ]; then
-            print_success "已启用 listen 模式"
-            ((success_count++))
+    if [ "$env_choice" = "1" ]; then
+        # 修改 start.sh
+        # 检查是否已经有 --max-old-space-size 参数
+        if grep -q "--max-old-space-size" "$start_file"; then
+            # 替换现有的内存限制
+            sed -i "s/--max-old-space-size=[0-9]*/--max-old-space-size=${memory_size}/g" "$start_file"
         else
-            print_error "启用 listen 模式失败"
+            # 添加新的内存限制参数
+            sed -i "s/node \"server.js\"/node --max-old-space-size=${memory_size} \"server.js\"/g" "$start_file"
         fi
     else
-        print_warning "listen 已经是 true 或未找到配置"
-    fi
-    
-    # 添加局域网 IP 段到白名单
-    print_info "添加局域网 IP 段到白名单..."
-    
-    # 检查是否已经添加过
-    if grep -q "10.0.0.0/8" "$config_file"; then
-        print_warning "局域网 IP 段已存在，跳过"
-    else
-        # 在 whitelist 部分添加局域网 IP 段
-        # 查找 whitelist: 行，然后在其后的 127.0.0.1 行后添加
-        if grep -q "^[[:space:]]*whitelist:" "$config_file"; then
-            # 在 127.0.0.1 行后添加局域网 IP 段
-            sed -i '/^[[:space:]]*- 127\.0\.0\.1/a\  - 10.0.0.0/8\n  - 172.16.0.0/12\n  - 192.168.0.0/16' "$config_file"
-            if [ $? -eq 0 ]; then
-                print_success "已添加局域网 IP 段到白名单"
-                ((success_count++))
-            else
-                print_error "添加局域网 IP 段失败"
-            fi
+        # 修改 start.bat
+        # 检查是否已经有 --max-old-space-size 参数
+        if grep -q "--max-old-space-size" "$start_file"; then
+            # 替换现有的内存限制
+            sed -i "s/--max-old-space-size=[0-9]*/--max-old-space-size=${memory_size}/g" "$start_file"
         else
-            print_warning "未找到 whitelist 配置"
+            # 添加新的内存限制参数
+            sed -i "s/node server.js/node --max-old-space-size=${memory_size} server.js/g" "$start_file"
         fi
     fi
     
-    echo ""
-    if [ $success_count -eq 2 ]; then
-        print_success "局域网访问已启用！请重启 SillyTavern 以应用更改"
-        print_info "您现在可以通过局域网 IP 访问 SillyTavern"
-        print_warning "请确保您的网络环境安全！"
-    elif [ $success_count -gt 0 ]; then
-        print_warning "部分修改完成，请检查日志"
+    if [ $? -eq 0 ]; then
+        print_success "内存限制已修改为: ${memory_size}MB"
+        print_info "请重启 SillyTavern 以应用更改"
     else
-        print_error "修改失败"
+        print_error "内存限制修改失败"
     fi
     
     echo ""
@@ -1519,7 +1704,7 @@ enable_lan_access() {
 
 show_main_menu() {
     clear
-    print_title "Foxium - SillyTavern 综合优化小工具"
+    print_title "Foxium - by KKTsN(橘狐) & limcode"
     
     echo "${BOLD}当前配置:${NC}"
     echo "  ST 目录: ${GREEN}$ST_DIR${NC}"
@@ -1540,14 +1725,15 @@ show_fix_menu() {
     clear
     print_title "修复功能"
     
-    echo "${BOLD}${CYAN}请选择修复功能:${NC}"
-    echo "1. 修复无法安装 npm/node 包问题"
-    echo "2. 修复 UI 主题导致卡死"
-    echo "3. 修复扩展无法卸载"
-    echo "4. 修复端口冲突"
-    echo "5. 修复无法打开聊天导致卡死"
-    echo "6. ${RED}修复 gemini-3 系列模型无法发送媒体 (风险)${NC}"
-    echo "7. 强制更新 ST"
+    echo "${BOLD}${CYAN}请选择要修复的问题:${NC}"
+    echo "1. 无法安装node包，或者缺少node包启动不了酒馆"
+    echo "2. UI 主题（美化）选错了，卡死进不去酒馆"
+    echo "3. 扩展在酒馆里卸载不掉"
+    echo "4. 酒馆端口和别的东西冲突了，开不起来"
+    echo "5. 聊天文件太大，一打开酒馆加载那个聊天就卡死"
+    echo "6. 酒馆更新不了，网不好或者提示什么什么merge"
+    echo "7. 1.13.5之前的酒馆总是爆内存"
+    echo "8. ${RED}1.14.0之前的酒馆无法给Gemini 3系列模型发图片 (风险)${NC}"
     echo ""
     echo "0. 返回主菜单"
     echo ""
@@ -1557,12 +1743,11 @@ show_optimize_menu() {
     clear
     print_title "优化功能"
     
-    echo "${BOLD}${CYAN}请选择优化功能:${NC}"
-    echo "1. 优化旧版本 ST 内存占用"
-    echo "2. 解除聊天记录文件大小限制"
-    echo "3. 更新聊天补全模型列表"
-    echo "4. ${RED}解除所有模型能力限制 (风险)${NC}"
-    echo "5. ${RED}一键对局域网开放 (风险)${NC}"
+    echo "${BOLD}${CYAN}请选择功能:${NC}"
+    echo "1. 解除聊天文件大小限制"
+    echo "2. 让旧版本酒馆也能选最新Gemini和Claude模型"
+    echo "3. 修改酒馆内存限制"
+    echo "4. ${RED}强解所有模型能力限制 (风险)${NC}"
     echo ""
     echo "0. 返回主菜单"
     echo ""
@@ -1572,9 +1757,9 @@ show_backup_menu() {
     clear
     print_title "备份功能"
     
-    echo "${BOLD}${CYAN}请选择备份功能:${NC}"
-    echo "1. 手动备份"
-    echo "2. 自动备份设置"
+    echo "${BOLD}${CYAN}要怎么备份呢？${NC}"
+    echo "1. 进行一次手动备份"
+    echo "2. 启用自动备份"
     echo ""
     echo "0. 返回主菜单"
     echo ""
@@ -1583,7 +1768,7 @@ show_backup_menu() {
 fix_menu_loop() {
     while true; do
         show_fix_menu
-        echo -ne "${YELLOW}请输入选项 [0-7]: ${NC}"
+        echo -ne "${YELLOW}请输入选项 [0-8]: ${NC}"
         read -r choice
         
         case $choice in
@@ -1592,11 +1777,12 @@ fix_menu_loop() {
             3) fix_extension_uninstall ;;
             4) fix_port_conflict ;;
             5) fix_chat_loading ;;
-            6) fix_gemini3_media ;;
-            7) force_update_st ;;
+            6) force_update_st ;;
+            7) optimize_memory_usage ;;
+            8) fix_gemini3_media ;;
             0) return ;;
             *)
-                print_error "无效的选项或功能尚未实现"
+                print_error "无效的选项"
                 ask_confirm "按回车键继续..." "y"
                 ;;
         esac
@@ -1606,15 +1792,14 @@ fix_menu_loop() {
 optimize_menu_loop() {
     while true; do
         show_optimize_menu
-        echo -ne "${YELLOW}请输入选项 [0-5]: ${NC}"
+        echo -ne "${YELLOW}请输入选项 [0-4]: ${NC}"
         read -r choice
         
         case $choice in
-            1) optimize_memory_usage ;;
-            2) remove_chat_size_limit ;;
-            3) update_model_list ;;
+            1) remove_chat_size_limit ;;
+            2) update_model_list ;;
+            3) modify_memory_limit ;;
             4) remove_model_restrictions ;;
-            5) enable_lan_access ;;
             0) return ;;
             *)
                 print_error "无效的选项"
@@ -1653,7 +1838,7 @@ main_loop() {
             2) optimize_menu_loop ;;
             3) backup_menu_loop ;;
             0)
-                print_info "感谢使用 Foxium！"
+                print_info "感谢使用 Foxium，再见！"
                 exit 0
                 ;;
             *)
