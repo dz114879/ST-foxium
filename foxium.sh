@@ -1507,7 +1507,7 @@ update_model_list() {
 
 # 优化功能 4: 解除所有模型能力限制
 remove_model_restrictions() {
-    print_title "强解所有模型能力限制"
+    print_title "强解所有模型多模态限制"
     
     print_risk "警告！这是一个未经充分测试的风险操作"
     print_info "修改检查模型是否有多模态能力的函数，让其直接返回true，从而绕过酒馆限制，允许向任意模型发送图片，视频和音频"
@@ -1747,7 +1747,7 @@ show_optimize_menu() {
     echo "1. 解除聊天文件大小限制"
     echo "2. 让旧版本酒馆也能选最新Gemini和Claude模型"
     echo "3. 修改酒馆内存限制"
-    echo "4. ${RED}强解所有模型能力限制 (风险)${NC}"
+    echo "4. ${RED}强解所有模型的多模态限制 (风险)${NC}"
     echo ""
     echo "0. 返回主菜单"
     echo ""
