@@ -18,12 +18,21 @@ NC='\033[0m' # No Color
 BOLD='\033[1m'
 
 # 全局变量
-# 使用更可靠的方式获取脚本所在目录
-SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
-# 如果 readlink -f 失败（某些系统不支持），则使用备用方法
-if [ -z "$SCRIPT_DIR" ] || [ ! -d "$SCRIPT_DIR" ]; then
+# 获取脚本所在目录 - 针对 Termux 优化
+# 首先尝试使用 realpath（Termux 推荐）
+if command -v realpath >/dev/null 2>&1; then
+    SCRIPT_DIR="$(dirname "$(realpath "$0")")"
+else
+    # 备用方法：使用 cd 和 pwd
     SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 fi
+
+# 如果获取的路径是 /proc/self/fd 或为空，使用当前工作目录
+if [ -z "$SCRIPT_DIR" ] || [[ "$SCRIPT_DIR" == /proc/self/fd* ]]; then
+    SCRIPT_DIR="$(pwd)"
+    print_warning "无法确定脚本目录，使用当前工作目录: $SCRIPT_DIR"
+fi
+
 ST_DIR=""
 BACKUP_DIR="${SCRIPT_DIR}/STbackupF"
 USER_NAME="default-user"
