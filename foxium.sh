@@ -18,7 +18,12 @@ NC='\033[0m' # No Color
 BOLD='\033[1m'
 
 # 全局变量
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# 使用更可靠的方式获取脚本所在目录
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+# 如果 readlink -f 失败（某些系统不支持），则使用备用方法
+if [ -z "$SCRIPT_DIR" ] || [ ! -d "$SCRIPT_DIR" ]; then
+    SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+fi
 ST_DIR=""
 BACKUP_DIR="${SCRIPT_DIR}/STbackupF"
 USER_NAME="default-user"
@@ -111,28 +116,54 @@ create_backup() {
 check_st_directory() {
     print_title "检查 SillyTavern 目录"
     
+    # 显示调试信息
+    print_info "脚本所在目录: $SCRIPT_DIR"
+    print_info "当前工作目录: $(pwd)"
+    echo ""
+    
     # 检查常见的 ST 目录名
     local possible_dirs=("SillyTavern" "sillytavern" "ST" "st" "SillyTavern-git" "SillyTavern-zip")
     
+    print_info "正在查找 SillyTavern 目录..."
+    echo ""
+    
     for dir in "${possible_dirs[@]}"; do
         local check_path="${SCRIPT_DIR}/${dir}"
+        echo "  检查: $check_path"
+        
         if [ -d "$check_path" ]; then
+            echo "    ${GREEN}✓${NC} 目录存在"
             # 检查关键文件是否存在
             if [ -f "${check_path}/server.js" ] && [ -f "${check_path}/package.json" ]; then
-                print_info "找到 SillyTavern 目录: $check_path"
+                echo "    ${GREEN}✓${NC} 包含 server.js 和 package.json"
+                print_info "找到有效的 SillyTavern 目录: $check_path"
                 if ask_confirm "是否使用此目录?"; then
                     ST_DIR="$check_path"
                     print_success "已设置 ST 目录: $ST_DIR"
                     return 0
                 fi
+            else
+                echo "    ${RED}✗${NC} 缺少关键文件 (server.js 或 package.json)"
             fi
+        else
+            echo "    ${RED}✗${NC} 目录不存在"
         fi
     done
     
+    echo ""
     # 未找到，让用户手动输入
     print_warning "未找到 SillyTavern 目录"
+    print_info "提示: 如果 SillyTavern 在当前目录，请输入完整路径"
+    print_info "例如: ${SCRIPT_DIR}/SillyTavern 或使用绝对路径"
+    echo ""
     echo -ne "${YELLOW}请输入 SillyTavern 目录的完整路径: ${NC}"
     read -r user_path
+    
+    # 如果用户输入的是相对路径，尝试转换为绝对路径
+    if [[ "$user_path" != /* ]]; then
+        # 相对路径，基于脚本目录
+        user_path="${SCRIPT_DIR}/${user_path}"
+    fi
     
     if [ -d "$user_path" ] && [ -f "${user_path}/server.js" ] && [ -f "${user_path}/package.json" ]; then
         ST_DIR="$user_path"
@@ -140,6 +171,13 @@ check_st_directory() {
         return 0
     else
         print_error "无效的 SillyTavern 目录"
+        if [ ! -d "$user_path" ]; then
+            print_error "目录不存在: $user_path"
+        elif [ ! -f "${user_path}/server.js" ]; then
+            print_error "缺少 server.js 文件"
+        elif [ ! -f "${user_path}/package.json" ]; then
+            print_error "缺少 package.json 文件"
+        fi
         return 1
     fi
 }
