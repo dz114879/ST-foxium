@@ -928,7 +928,7 @@ fix_port_conflict() {
     fi
     
     # 读取当前端口
-    local current_port=$(grep -E '^[[:space:]]*port:' "$config_file" | sed -E 's/^[[:space:]]*port:[[:space:]]*([0-9]+).*/\1/')
+    local current_port=$(grep -A 1 "# Server port" "$config_file" | grep "port:" | sed -E 's/.*port:[[:space:]]*([0-9]+).*/\1/')
     
     if [ -n "$current_port" ]; then
         print_info "当前端口: $current_port"
@@ -995,7 +995,7 @@ fix_port_conflict() {
     
     # 修改端口
     print_info "修改端口设置..."
-    sed -i "s/^[[:space:]]*port:[[:space:]]*[0-9]*/port: $new_port/" "$config_file"
+    sed -i "/# Server port/{n;s/port:[[:space:]]*[0-9]*/port: $new_port/;}" "$config_file"
     
     if [ $? -eq 0 ]; then
         print_success "端口已修改为: $new_port"
