@@ -19,18 +19,23 @@ BOLD='\033[1m'
 
 # 全局变量
 # 获取脚本所在目录 - 针对 Termux 优化
-# 首先尝试使用 realpath（Termux 推荐）
-if command -v realpath >/dev/null 2>&1; then
-    SCRIPT_DIR="$(dirname "$(realpath "$0")")"
-else
-    # 备用方法：使用 cd 和 pwd
-    SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-fi
-
-# 如果获取的路径是 /proc/self/fd 或为空，使用当前工作目录
-if [ -z "$SCRIPT_DIR" ] || [[ "$SCRIPT_DIR" == /proc/self/fd* ]]; then
+# 检测是否通过管道执行（curl | bash）
+if [[ "$0" == /proc/self/fd* ]] || [[ "$0" == "bash" ]] || [[ "$0" == "-bash" ]]; then
+    # 通过管道执行，使用当前工作目录
     SCRIPT_DIR="$(pwd)"
-    print_warning "无法确定脚本目录，使用当前工作目录: $SCRIPT_DIR"
+else
+    # 正常执行，尝试获取脚本所在目录
+    if command -v realpath >/dev/null 2>&1; then
+        SCRIPT_DIR="$(dirname "$(realpath "$0")")"
+    else
+        # 备用方法：使用 cd 和 pwd
+        SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+    fi
+    
+    # 如果获取的路径仍然是 /proc/self/fd 或为空，使用当前工作目录
+    if [ -z "$SCRIPT_DIR" ] || [[ "$SCRIPT_DIR" == /proc/self/fd* ]]; then
+        SCRIPT_DIR="$(pwd)"
+    fi
 fi
 
 ST_DIR=""
