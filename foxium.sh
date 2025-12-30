@@ -452,9 +452,9 @@ manual_backup() {
 auto_backup_setup() {
     print_title "自动备份设置"
     
-    print_info "此功能将修改 start.sh 或 Start.bat，让酒馆启动前自动创建带时间戳的备份"
+    print_info "此功能将修改 start.sh 或 Start.bat，让酒馆启动前自动创建带时间戳的备份。"
     echo ""
-    print_warning "启用后，每次启动 ST 都会执行备份，可能略微延长启动时间；自动备份仅保留最新1个，新备份会覆盖旧备份；若要禁用，需要手动编辑被修改的文件，删除备份代码"
+    print_warning "启用后，每次启动 ST 都会执行备份，可能略微延长启动时间；自动备份仅保留最新1个，新备份会覆盖旧备份；仅会备份世界书，角色卡，聊天补全预设，快速回复和settings(含正则和user信息等)。若要禁用，需要手动编辑被修改的文件，删除备份代码"
     echo ""
     
     # 让用户选择环境
@@ -928,7 +928,7 @@ fix_port_conflict() {
     fi
     
     # 读取当前端口
-    local current_port=$(grep -E '^[[:space:]]*port:' "$config_file" | sed -E 's/^[[:space:]]*port:[[:space:]]*([0-9]+).*/\1/')
+    local current_port=$(grep -A 1 "# Server port" "$config_file" | grep "port:" | sed -E 's/.*port:[[:space:]]*([0-9]+).*/\1/')
     
     if [ -n "$current_port" ]; then
         print_info "当前端口: $current_port"
@@ -995,7 +995,7 @@ fix_port_conflict() {
     
     # 修改端口
     print_info "修改端口设置..."
-    sed -i "s/^[[:space:]]*port:[[:space:]]*[0-9]*/port: $new_port/" "$config_file"
+    sed -i "/# Server port/{n;s/port:[[:space:]]*[0-9]*/port: $new_port/;}" "$config_file"
     
     if [ $? -eq 0 ]; then
         print_success "端口已修改为: $new_port"
@@ -1053,8 +1053,8 @@ fix_chat_loading() {
         
         print_info "修改 config.yaml 中的 lazyLoadCharacters..."
         
-        # 使用 sed 替换 lazyLoadCharacters 设置
-        sed -i 's/^[[:space:]]*lazyLoadCharacters:[[:space:]]*false/lazyLoadCharacters: true/g' "$config_file"
+        # 使用 sed 替换 lazyLoadCharacters 设置 (保留缩进)
+        sed -i 's/^\([[:space:]]*lazyLoadCharacters:[[:space:]]*\)false/\1true/g' "$config_file"
         
         if [ $? -eq 0 ]; then
             print_success "已启用角色懒加载"
@@ -1507,7 +1507,7 @@ update_model_list() {
 
 # 优化功能 4: 解除所有模型能力限制
 remove_model_restrictions() {
-    print_title "强解所有模型能力限制"
+    print_title "强解所有模型多模态限制"
     
     print_risk "警告！这是一个未经充分测试的风险操作"
     print_info "修改检查模型是否有多模态能力的函数，让其直接返回true，从而绕过酒馆限制，允许向任意模型发送图片，视频和音频"
@@ -1728,12 +1728,12 @@ show_fix_menu() {
     echo "${BOLD}${CYAN}请选择要修复的问题:${NC}"
     echo "1. 无法安装node包，或者缺少node包启动不了酒馆"
     echo "2. UI 主题（美化）选错了，卡死进不去酒馆"
-    echo "3. 扩展出bug了，酒馆里卸载不掉"
+    echo "3. 扩展在酒馆里卸载不掉"
     echo "4. 酒馆端口和别的东西冲突了，开不起来"
-    echo "5. 聊天文件太大了，一打开酒馆加载那个聊天就卡死"
-    echo "6. 酒馆更新不了，网不好或者提示什么什么merge"
-    echo "7. 旧版本（1.13.5）之前的酒馆总是爆内存"
-    echo "8. ${RED}旧版本酒馆Gemini 3系列模型无法发送媒体 (风险)${NC}"
+    echo "5. 聊天文件太大，一打开酒馆加载那个聊天就卡死"
+    echo "6. 酒馆更新不了，提示什么什么merge或者branch"
+    echo "7. 1.13.5之前的酒馆总是爆内存"
+    echo "8. ${RED}1.14.0之前的酒馆无法给Gemini 3系列模型发图片 (风险)${NC}"
     echo ""
     echo "0. 返回主菜单"
     echo ""
@@ -1747,7 +1747,7 @@ show_optimize_menu() {
     echo "1. 解除聊天文件大小限制"
     echo "2. 让旧版本酒馆也能选最新Gemini和Claude模型"
     echo "3. 修改酒馆内存限制"
-    echo "4. ${RED}强解所有模型能力限制 (风险)${NC}"
+    echo "4. ${RED}强解所有模型的多模态限制 (风险)${NC}"
     echo ""
     echo "0. 返回主菜单"
     echo ""
