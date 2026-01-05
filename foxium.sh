@@ -1360,16 +1360,10 @@ optimize_memory_usage() {
 remove_chat_size_limit() {
     print_title "解除聊天记录文件大小限制"
     
-    print_info "此功能将server-main.js中bodyParser的limit从500mb改为9999mb，从而解除聊天记录大小限制，允许酒馆加载更大的聊天记录而不崩溃"
+    print_info "酒馆默认对聊天记录文件有500mb的大小限制，超出将导致酒馆崩溃。此功能修改 server-main.js 中 bodyParser 的 limit 值，调整聊天记录大小限制，允许酒馆加载更大的聊天记录而不崩溃"
     echo ""
-    echo "  适用于某些插件导致聊天记录变得超大的时候"
+    echo "适用于某些插件导致聊天记录变得超大的时候（不过我更建议你暂时不用这些插件，一个聊天记录几百mb肯定是bug了）。"
     echo ""
-    
-    if ! ask_confirm "确认执行此操作吗?"; then
-        print_info "操作已取消"
-        ask_confirm "按回车键继续..." "y"
-        return
-    fi
     
     local server_main="${ST_DIR}/src/server-main.js"
     
@@ -1377,6 +1371,58 @@ remove_chat_size_limit() {
         print_error "server-main.js 不存在: $server_main"
         ask_confirm "按回车键继续..." "y"
         return 1
+    fi
+    
+    # 读取当前的 limit 值
+    local current_limit=$(grep -o "bodyParser\.json({ limit: '[^']*'" "$server_main" | grep -o "'[^']*'" | tr -d "'" | head -n 1)
+    
+    if [ -n "$current_limit" ]; then
+        print_info "当前文件大小限制: $current_limit"
+    else
+        print_warning "无法读取当前限制，默认为 500mb"
+        current_limit="500mb"
+    fi
+    
+    echo ""
+    print_info "请输入新的文件大小限制（单位: MB）"
+    print_info "推荐值: 1024 (1GB) - 4096 (4GB)"
+    print_warning "上限: 9999 MB"
+    echo -ne "${YELLOW}请输入大小 [默认: 4096]: ${NC}"
+    read -r input_size
+    
+    local new_size
+    if [ -z "$input_size" ]; then
+        new_size=4096
+    else
+        new_size=$input_size
+    fi
+    
+    # 验证输入是否为数字
+    if ! [[ "$new_size" =~ ^[0-9]+$ ]]; then
+        print_error "无效的大小: $new_size（必须是数字）"
+        ask_confirm "按回车键继续..." "y"
+        return 1
+    fi
+    
+    # 检查上限
+    if [ $new_size -gt 9999 ]; then
+        print_error "大小超过上限 9999 MB"
+        ask_confirm "按回车键继续..." "y"
+        return 1
+    fi
+    
+    if [ $new_size -lt 1 ]; then
+        print_error "大小必须至少为 1 MB"
+        ask_confirm "按回车键继续..." "y"
+        return 1
+    fi
+    
+    print_info "将文件大小限制设置为: ${new_size}mb"
+    
+    if ! ask_confirm "确认修改文件大小限制吗?"; then
+        print_info "操作已取消"
+        ask_confirm "按回车键继续..." "y"
+        return
     fi
     
     # 备份
@@ -1389,10 +1435,11 @@ remove_chat_size_limit() {
     local success_count=0
     
     # 修改 bodyParser.json 的 limit
-    if grep -q "app.use(bodyParser.json({ limit: '500mb' }));" "$server_main"; then
-        sed -i "s/app\.use(bodyParser\.json({ limit: '500mb' }));/app.use(bodyParser.json({ limit: '9999mb' }));/" "$server_main"
+    if grep -q "app.use(bodyParser.json({ limit:" "$server_main"; then
+        # 使用通用替换，匹配任意 limit 值
+        sed -i "s/app\.use(bodyParser\.json({ limit: '[^']*' }));/app.use(bodyParser.json({ limit: '${new_size}mb' }));/" "$server_main"
         if [ $? -eq 0 ]; then
-            print_success "已修改 bodyParser.json limit"
+            print_success "已修改 bodyParser.json limit 为 ${new_size}mb"
             ((success_count++))
         else
             print_error "修改 bodyParser.json limit 失败"
@@ -1402,10 +1449,11 @@ remove_chat_size_limit() {
     fi
     
     # 修改 bodyParser.urlencoded 的 limit
-    if grep -q "app.use(bodyParser.urlencoded({ extended: true, limit: '500mb' }));" "$server_main"; then
-        sed -i "s/app\.use(bodyParser\.urlencoded({ extended: true, limit: '500mb' }));/app.use(bodyParser.urlencoded({ extended: true, limit: '9999mb' }));/" "$server_main"
+    if grep -q "app.use(bodyParser.urlencoded({ extended: true, limit:" "$server_main"; then
+        # 使用通用替换，匹配任意 limit 值
+        sed -i "s/app\.use(bodyParser\.urlencoded({ extended: true, limit: '[^']*' }));/app.use(bodyParser.urlencoded({ extended: true, limit: '${new_size}mb' }));/" "$server_main"
         if [ $? -eq 0 ]; then
-            print_success "已修改 bodyParser.urlencoded limit"
+            print_success "已修改 bodyParser.urlencoded limit 为 ${new_size}mb"
             ((success_count++))
         else
             print_error "修改 bodyParser.urlencoded limit 失败"
@@ -1416,11 +1464,11 @@ remove_chat_size_limit() {
     
     echo ""
     if [ $success_count -eq 2 ]; then
-        print_success "文件大小限制已解除！请重启 SillyTavern 以应用更改"
+        print_success "文件大小限制已修改为 ${new_size}mb！请重启 SillyTavern 以应用更改"
     elif [ $success_count -gt 0 ]; then
-        print_warning "部分修改完成，请检查日志"
+        print_warning "部分修改完成（${success_count}/2），请检查日志"
     else
-        print_error "修改失败"
+        print_error "修改失败，未找到配置项"
     fi
     
     echo ""
