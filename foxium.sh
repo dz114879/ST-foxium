@@ -1697,6 +1697,83 @@ modify_memory_limit() {
     ask_confirm "按回车键继续..." "y"
 }
 
+# 优化功能 4: 修改备份数量
+modify_backup_count() {
+    print_title "修改备份数量"
+    
+    print_info "酒馆默认会为每张卡和settings.json各保存最多50个备份，对于聊天文件较大的卡，大量备份文件会占用很大的储存空间。本功能修改 config.yaml 中的 backups.common.numberOfBackups 值，控制每个聊天和设置文件保留的备份数量"
+    echo ""
+    echo "  大多数情况下这些备份除了占空间以外并没有任何用（聊天记录丢了要恢复的话，也只会用到最近几个）。推荐3-10，默认会改为3"
+    echo ""
+    
+    local config_file="${ST_DIR}/config.yaml"
+    
+    if [ ! -f "$config_file" ]; then
+        print_error "config.yaml 不存在: $config_file"
+        ask_confirm "按回车键继续..." "y"
+        return 1
+    fi
+    
+    # 读取当前备份数量
+    local current_count=$(grep -A 2 "backups:" "$config_file" | grep "numberOfBackups:" | sed -E 's/.*numberOfBackups:[[:space:]]*([0-9]+).*/\1/')
+    
+    if [ -n "$current_count" ]; then
+        print_info "当前备份数量: $current_count"
+    else
+        print_warning "无法读取当前备份数量，默认为 50"
+        current_count=50
+    fi
+    
+    echo ""
+    echo -ne "${YELLOW}请输入新的备份数量 [默认: 3]: ${NC}"
+    read -r input_count
+    
+    local new_count
+    if [ -z "$input_count" ]; then
+        new_count=3
+    else
+        new_count=$input_count
+    fi
+    
+    # 验证输入是否为正整数
+    if ! [[ "$new_count" =~ ^[0-9]+$ ]]; then
+        print_error "无效的备份数量: $new_count（必须是正整数）"
+        ask_confirm "按回车键继续..." "y"
+        return 1
+    fi
+    
+    if [ $new_count -lt 1 ]; then
+        print_error "备份数量必须至少为 1"
+        ask_confirm "按回车键继续..." "y"
+        return 1
+    fi
+    
+    print_info "将备份数量设置为: $new_count"
+    
+    if ! ask_confirm "确认修改备份数量吗?"; then
+        print_info "操作已取消"
+        ask_confirm "按回车键继续..." "y"
+        return
+    fi
+    
+    # 备份
+    print_info "备份 config.yaml..."
+    create_backup "$config_file" "config"
+    
+    # 修改备份数量（注意保持缩进）
+    print_info "修改备份数量设置..."
+    sed -i 's/^\(    numberOfBackups:\)[[:space:]]*[0-9]*/\1 '"$new_count"'/' "$config_file"
+    
+    if [ $? -eq 0 ]; then
+        print_success "备份数量已修改为: $new_count"
+    else
+        print_error "备份数量修改失败"
+    fi
+    
+    echo ""
+    ask_confirm "按回车键继续..." "y"
+}
+
 
 # ========================================
 # 主菜单
@@ -1747,7 +1824,8 @@ show_optimize_menu() {
     echo "1. 解除聊天文件大小限制"
     echo "2. 让旧版本酒馆也能选最新Gemini和Claude模型"
     echo "3. 修改酒馆内存限制"
-    echo "4. ${RED}强解所有模型的多模态限制 (风险)${NC}"
+    echo "4. 修改备份保留数量，减小酒馆空间占用"
+    echo "5. ${RED}强解所有模型的多模态限制 (风险)${NC}"
     echo ""
     echo "0. 返回主菜单"
     echo ""
@@ -1792,14 +1870,15 @@ fix_menu_loop() {
 optimize_menu_loop() {
     while true; do
         show_optimize_menu
-        echo -ne "${YELLOW}请输入选项 [0-4]: ${NC}"
+        echo -ne "${YELLOW}请输入选项 [0-5]: ${NC}"
         read -r choice
         
         case $choice in
             1) remove_chat_size_limit ;;
             2) update_model_list ;;
             3) modify_memory_limit ;;
-            4) remove_model_restrictions ;;
+            4) modify_backup_count ;;
+            5) remove_model_restrictions ;;
             0) return ;;
             *)
                 print_error "无效的选项"
