@@ -1235,6 +1235,66 @@ force_update_st() {
     ask_confirm "按回车键继续..." "y"
 }
 
+# 修复功能 9: 禁用 CSRF 保护（风险）
+disable_csrf_protection() {
+    print_title "禁用 CSRF 保护 (风险)"
+    
+    print_info "此功能将修改 config.yaml 中的 disableCsrfProtection 设置，禁用酒馆自带的CSRF保护。"
+    echo ""
+    print_warning "即使是本地酒馆，禁用CSRF保护也会降低安全性。本设置仅适用于1.15.0版本酒馆因漏洞导致无限ForbiddenError: Invalid CSRF token的情况。如果你未遇到此问题，不要继续操作"
+    echo ""
+    
+    local config_file="${ST_DIR}/config.yaml"
+    
+    if [ ! -f "$config_file" ]; then
+        print_error "config.yaml 不存在: $config_file"
+        ask_confirm "按回车键继续..." "y"
+        return 1
+    fi
+    
+    # 读取当前 CSRF 保护状态
+    local current_status=$(grep "disableCsrfProtection:" "$config_file" | sed -E 's/.*disableCsrfProtection:[[:space:]]*(true|false).*/\1/')
+    
+    if [ -n "$current_status" ]; then
+        print_info "当前 CSRF 保护状态: $([ "$current_status" = "false" ] && echo "启用" || echo "禁用")"
+    else
+        print_warning "无法读取当前 CSRF 保护状态"
+    fi
+    
+    # 如果已经是 true，则提示并返回
+    if [ "$current_status" = "true" ]; then
+        print_warning "CSRF 保护已经被禁用，无需再次操作"
+        echo ""
+        ask_confirm "按回车键继续..." "y"
+        return 0
+    fi
+    
+    echo ""
+    if ! ask_confirm "确认禁用 CSRF 保护吗?"; then
+        print_info "操作已取消"
+        ask_confirm "按回车键继续..." "y"
+        return
+    fi
+    
+    # 备份
+    print_info "备份 config.yaml..."
+    create_backup "$config_file" "config"
+    
+    # 修改 CSRF 保护设置
+    print_info "修改 CSRF 保护设置..."
+    sed -i 's/^\(disableCsrfProtection:\)[[:space:]]*false/\1 true/' "$config_file"
+    
+    if [ $? -eq 0 ]; then
+        print_success "CSRF 保护已禁用"
+        print_info "请重启 SillyTavern 以应用更改"
+    else
+        print_error "CSRF 保护设置修改失败"
+    fi
+    
+    echo ""
+    ask_confirm "按回车键继续..." "y"
+}
+
 
 # ========================================
 # 优化功能
@@ -1362,6 +1422,8 @@ remove_chat_size_limit() {
     
     print_info "酒馆默认对聊天记录文件有500mb的大小限制，超出将导致酒馆崩溃。此功能修改 server-main.js 中 bodyParser 的 limit 值，调整聊天记录大小限制，允许酒馆加载更大的聊天记录而不崩溃"
     echo ""
+    echo "由于Nodejs本身有1gb的上限，改成更大的值的效果和1024mb相同"
+    echo ""
     echo "适用于某些插件导致聊天记录变得超大的时候（不过我更建议你暂时不用这些插件，一个聊天记录几百mb肯定是bug了）。"
     echo ""
     
@@ -1385,14 +1447,14 @@ remove_chat_size_limit() {
     
     echo ""
     print_info "请输入新的文件大小限制（单位: MB）"
-    print_info "推荐值: 1024 (1GB) - 4096 (4GB)"
-    print_warning "上限: 9999 MB"
-    echo -ne "${YELLOW}请输入大小 [默认: 4096]: ${NC}"
+    print_info "推荐值: 1024 (1GB)"
+    print_warning "上限: 1024 MB"
+    echo -ne "${YELLOW}请输入大小 [默认: 1024]: ${NC}"
     read -r input_size
     
     local new_size
     if [ -z "$input_size" ]; then
-        new_size=4096
+        new_size=1024
     else
         new_size=$input_size
     fi
@@ -1405,8 +1467,8 @@ remove_chat_size_limit() {
     fi
     
     # 检查上限
-    if [ $new_size -gt 9999 ]; then
-        print_error "大小超过上限 9999 MB"
+    if [ $new_size -gt 1024 ]; then
+        print_error "大小超过上限 1024 MB"
         ask_confirm "按回车键继续..." "y"
         return 1
     fi
@@ -1553,7 +1615,8 @@ update_model_list() {
     ask_confirm "按回车键继续..." "y"
 }
 
-# 优化功能 4: 解除所有模型能力限制
+
+# 优化功能 5: 解除所有模型能力限制
 remove_model_restrictions() {
     print_title "强解所有模型多模态限制"
     
@@ -1859,6 +1922,7 @@ show_fix_menu() {
     echo "6. 酒馆更新不了，提示什么什么merge或者branch"
     echo "7. 1.13.5之前的酒馆总是爆内存"
     echo "8. ${RED}1.14.0之前的酒馆无法给Gemini 3系列模型发图片 (风险)${NC}"
+    echo "9. ${RED}1.15.0无限 ForbiddenError: Invalid CSRF token(风险)${NC}"
     echo ""
     echo "0. 返回主菜单"
     echo ""
@@ -1894,7 +1958,7 @@ show_backup_menu() {
 fix_menu_loop() {
     while true; do
         show_fix_menu
-        echo -ne "${YELLOW}请输入选项 [0-8]: ${NC}"
+        echo -ne "${YELLOW}请输入选项 [0-9]: ${NC}"
         read -r choice
         
         case $choice in
@@ -1906,6 +1970,7 @@ fix_menu_loop() {
             6) force_update_st ;;
             7) optimize_memory_usage ;;
             8) fix_gemini3_media ;;
+            9) disable_csrf_protection ;;
             0) return ;;
             *)
                 print_error "无效的选项"
