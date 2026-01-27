@@ -306,147 +306,8 @@ run_startup_checks() {
 }
 
 # ========================================
-# 备份功能
+# 修复功能
 # ========================================
-
-manual_backup() {
-    print_title "手动备份"
-    
-    print_info "请选择要备份的内容:"
-    echo "1. 世界书 (worlds)"
-    echo "2. 角色卡 (characters)"
-    echo "3. 聊天补全预设 (OpenAI Settings)"
-    echo "4. 快速回复 (QuickReplies)"
-    echo "5. settings.json"
-    echo "6. secrets.json ${RED}(包含密钥等敏感信息)${NC}"
-    echo "7. config.yaml"
-    echo "8. 聊天记录 (chats) ${RED}(可能很大)${NC}"
-    echo "9. '为自己安装'扩展 (extensions)"
-    echo "10. '为所有人安装'扩展 (third-party)"
-    echo "11. 世界书+角色卡+预设+快速回复"
-    echo "12. 全部备份"
-    echo "0. 返回主菜单"
-    
-    echo -ne "\n${YELLOW}请输入选项 [0-12]: ${NC}"
-    read -r choice
-    
-    case $choice in
-        1)
-            if [ -d "${USER_DIR}/worlds" ]; then
-                create_backup "${USER_DIR}/worlds" "worlds"
-            else
-                print_warning "世界书目录不存在"
-            fi
-            ;;
-        2)
-            if [ -d "${USER_DIR}/characters" ]; then
-                create_backup "${USER_DIR}/characters" "characters"
-            else
-                print_warning "角色卡目录不存在"
-            fi
-            ;;
-        3)
-            if [ -d "${USER_DIR}/OpenAI Settings" ]; then
-                create_backup "${USER_DIR}/OpenAI Settings" "openai_settings"
-            else
-                print_warning "聊天补全预设目录不存在"
-            fi
-            ;;
-        4)
-            if [ -d "${USER_DIR}/QuickReplies" ]; then
-                create_backup "${USER_DIR}/QuickReplies" "quick_replies"
-            else
-                print_warning "快速回复目录不存在"
-            fi
-            ;;
-        5)
-            if [ -f "${USER_DIR}/settings.json" ]; then
-                create_backup "${USER_DIR}/settings.json" "settings"
-            else
-                print_warning "settings.json 不存在"
-            fi
-            ;;
-        6)
-            print_warning "secrets.json 包含 API 密钥等敏感信息，如果有人让你把这个文件发给他，对方百分之一万是骗子！"
-            if ask_confirm "确认要备份 secrets.json 吗?"; then
-                if [ -f "${USER_DIR}/secrets.json" ]; then
-                    create_backup "${USER_DIR}/secrets.json" "secrets"
-                else
-                    print_warning "secrets.json 不存在"
-                fi
-            fi
-            ;;
-        7)
-            if [ -f "${ST_DIR}/config.yaml" ]; then
-                create_backup "${ST_DIR}/config.yaml" "config"
-            else
-                print_warning "config.yaml 不存在"
-            fi
-            ;;
-        8)
-            print_warning "请注意，聊天记录可能占用大量空间"
-            if ask_confirm "确认要备份聊天记录吗?"; then
-                if [ -d "${USER_DIR}/chats" ]; then
-                    create_backup "${USER_DIR}/chats" "chats"
-                else
-                    print_warning "聊天记录目录不存在"
-                fi
-            fi
-            ;;
-        9)
-            if [ -d "${USER_DIR}/extensions" ]; then
-                create_backup "${USER_DIR}/extensions" "user_extensions"
-            else
-                print_warning "用户扩展目录不存在"
-            fi
-            ;;
-        10)
-            if [ -d "${ST_DIR}/public/scripts/extensions/third-party" ]; then
-                create_backup "${ST_DIR}/public/scripts/extensions/third-party" "third_party_extensions"
-            else
-                print_warning "第三方扩展目录不存在"
-            fi
-            ;;
-        11)
-            print_info "备份世界书+角色卡+预设+快速回复..."
-            [ -d "${USER_DIR}/worlds" ] && create_backup "${USER_DIR}/worlds" "worlds"
-            [ -d "${USER_DIR}/characters" ] && create_backup "${USER_DIR}/characters" "characters"
-            [ -d "${USER_DIR}/OpenAI Settings" ] && create_backup "${USER_DIR}/OpenAI Settings" "openai_settings"
-            [ -d "${USER_DIR}/QuickReplies" ] && create_backup "${USER_DIR}/QuickReplies" "quick_replies"
-            print_success "备份完成！"
-            ;;
-        12)
-            print_info "开始全部备份..."
-            [ -d "${USER_DIR}/worlds" ] && create_backup "${USER_DIR}/worlds" "worlds"
-            [ -d "${USER_DIR}/characters" ] && create_backup "${USER_DIR}/characters" "characters"
-            [ -d "${USER_DIR}/OpenAI Settings" ] && create_backup "${USER_DIR}/OpenAI Settings" "openai_settings"
-            [ -d "${USER_DIR}/QuickReplies" ] && create_backup "${USER_DIR}/QuickReplies" "quick_replies"
-            [ -f "${USER_DIR}/settings.json" ] && create_backup "${USER_DIR}/settings.json" "settings"
-            [ -f "${ST_DIR}/config.yaml" ] && create_backup "${ST_DIR}/config.yaml" "config"
-            [ -d "${USER_DIR}/extensions" ] && create_backup "${USER_DIR}/extensions" "user_extensions"
-            [ -d "${ST_DIR}/public/scripts/extensions/third-party" ] && create_backup "${ST_DIR}/public/scripts/extensions/third-party" "third_party_extensions"
-            
-            if ask_confirm "是否也备份 secrets.json (包含敏感信息)?"; then
-                [ -f "${USER_DIR}/secrets.json" ] && create_backup "${USER_DIR}/secrets.json" "secrets"
-            fi
-            
-            if ask_confirm "是否也备份聊天记录 (可能很大)?"; then
-                [ -d "${USER_DIR}/chats" ] && create_backup "${USER_DIR}/chats" "chats"
-            fi
-            
-            print_success "全部备份完成！"
-            ;;
-        0)
-            return
-            ;;
-        *)
-            print_error "无效的选项"
-            ;;
-    esac
-    
-    echo ""
-    ask_confirm "按回车键继续..." "y"
-}
 
 # 自动备份设置
 auto_backup_setup() {
@@ -1235,78 +1096,21 @@ force_update_st() {
     ask_confirm "按回车键继续..." "y"
 }
 
-# 修复功能 9: 禁用 CSRF 保护（风险）
-disable_csrf_protection() {
-    print_title "禁用 CSRF 保护 (风险)"
-    
-    print_info "此功能将修改 config.yaml 中的 disableCsrfProtection 设置，禁用酒馆自带的CSRF保护。"
-    echo ""
-    print_warning "即使是本地酒馆，禁用CSRF保护也会降低安全性。本设置仅适用于1.15.0版本酒馆因漏洞导致无限ForbiddenError: Invalid CSRF token的情况。如果你未遇到此问题，不要继续操作"
-    echo ""
-    
-    local config_file="${ST_DIR}/config.yaml"
-    
-    if [ ! -f "$config_file" ]; then
-        print_error "config.yaml 不存在: $config_file"
-        ask_confirm "按回车键继续..." "y"
-        return 1
-    fi
-    
-    # 读取当前 CSRF 保护状态
-    local current_status=$(grep "disableCsrfProtection:" "$config_file" | sed -E 's/.*disableCsrfProtection:[[:space:]]*(true|false).*/\1/')
-    
-    if [ -n "$current_status" ]; then
-        print_info "当前 CSRF 保护状态: $([ "$current_status" = "false" ] && echo "启用" || echo "禁用")"
-    else
-        print_warning "无法读取当前 CSRF 保护状态"
-    fi
-    
-    # 如果已经是 true，则提示并返回
-    if [ "$current_status" = "true" ]; then
-        print_warning "CSRF 保护已经被禁用，无需再次操作"
-        echo ""
-        ask_confirm "按回车键继续..." "y"
-        return 0
-    fi
-    
-    echo ""
-    if ! ask_confirm "确认禁用 CSRF 保护吗?"; then
-        print_info "操作已取消"
-        ask_confirm "按回车键继续..." "y"
-        return
-    fi
-    
-    # 备份
-    print_info "备份 config.yaml..."
-    create_backup "$config_file" "config"
-    
-    # 修改 CSRF 保护设置
-    print_info "修改 CSRF 保护设置..."
-    sed -i 's/^\(disableCsrfProtection:\)[[:space:]]*false/\1 true/' "$config_file"
-    
-    if [ $? -eq 0 ]; then
-        print_success "CSRF 保护已禁用"
-        print_info "请重启 SillyTavern 以应用更改"
-    else
-        print_error "CSRF 保护设置修改失败"
-    fi
-    
-    echo ""
-    ask_confirm "按回车键继续..." "y"
-}
-
 
 # ========================================
 # 优化功能
 # ========================================
 
-# 修复功能 7 (原优化功能1): 优化旧版本 ST 内存占用
-optimize_memory_usage() {
-    print_title "优化旧版本 ST 内存占用"
+# 修复功能 7: 二合一 Never OOM
+never_oom() {
+    print_title "二合一 Never OOM"
     
-    print_info "此功能将修改 src/users.js 和 src/endpoints/characters.js 文件，通过添加 expiredInterval: 0 配置禁用定期过期项目检查，优化旧版酒馆的内存占用"
+    print_info "此功能包含两个内存优化操作："
+    echo "  1. 优化旧版本 ST 内存占用（修改 users.js 和 characters.js）"
+    echo "  2. 修改启动脚本内存限制（修改 start.sh 或 start.bat）"
     echo ""
-    echo "适用于1.13.4及之前版本酒馆频繁出现爆内存（JavaScript heap out of memory）问题，导致崩溃的情况"
+    print_info "两个操作将分别检查并执行，帮助解决酒馆爆内存问题"
+    echo ""
     
     if ! ask_confirm "确认执行此操作吗?"; then
         print_info "操作已取消"
@@ -1314,104 +1118,204 @@ optimize_memory_usage() {
         return
     fi
     
+    echo ""
+    print_title "[1/2] 优化旧版本 ST 内存占用"
+    
+    print_info "此步骤将修改 src/users.js 和 src/endpoints/characters.js 文件，通过添加 expiredInterval: 0 配置禁用定期过期项目检查"
+    echo "适用于1.13.4及之前版本酒馆频繁出现爆内存（JavaScript heap out of memory）问题"
+    echo ""
+    
     # 检查 ST 版本
     local package_json="${ST_DIR}/package.json"
     if [ ! -f "$package_json" ]; then
-        print_error "package.json 不存在: $package_json"
-        ask_confirm "按回车键继续..." "y"
-        return 1
-    fi
-    
-    print_info "检查 ST 版本..."
-    local st_version=$(grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' "$package_json" | sed 's/"version"[[:space:]]*:[[:space:]]*"\([^"]*\)"/\1/')
-    
-    if [ -z "$st_version" ]; then
-        print_warning "无法读取 ST 版本，继续执行..."
+        print_warning "package.json 不存在，跳过版本检查"
     else
-        print_info "当前 ST 版本: $st_version"
+        print_info "检查 ST 版本..."
+        local st_version=$(grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' "$package_json" | sed 's/"version"[[:space:]]*:[[:space:]]*"\([^"]*\)"/\1/')
         
-        # 简单的版本比较 (假设版本格式为 x.y.z)
-        local major=$(echo "$st_version" | cut -d. -f1)
-        local minor=$(echo "$st_version" | cut -d. -f2)
-        local patch=$(echo "$st_version" | cut -d. -f3)
-        
-        if [ "$major" -gt 1 ] || ([ "$major" -eq 1 ] && [ "$minor" -gt 13 ]) || ([ "$major" -eq 1 ] && [ "$minor" -eq 13 ] && [ "$patch" -ge 5 ]); then
-            print_warning "ST 版本 >= 1.13.5，该修复已被官方合并，无需执行"
-            echo ""
-            ask_confirm "按回车键继续..." "y"
-            return
-        fi
-    fi
-    
-    local success_count=0
-    
-    # 修改 users.js
-    local users_js="${ST_DIR}/src/users.js"
-    if [ -f "$users_js" ]; then
-        print_info "备份 users.js..."
-        create_backup "$users_js" "users_js"
-        
-        print_info "修改 users.js..."
-        
-        # 检查是否已经存在 expiredInterval
-        if grep -q "ttl: false, // Never expire" "$users_js"; then
-            # 检查下一行是否已经是 expiredInterval: 0,
-            if grep -A 1 "ttl: false, // Never expire" "$users_js" | grep -q "expiredInterval: 0,"; then
-                print_warning "users.js 已经包含 expiredInterval 配置，跳过"
+        if [ -z "$st_version" ]; then
+            print_warning "无法读取 ST 版本，继续执行..."
+        else
+            print_info "当前 ST 版本: $st_version"
+            
+            # 简单的版本比较 (假设版本格式为 x.y.z)
+            local major=$(echo "$st_version" | cut -d. -f1)
+            local minor=$(echo "$st_version" | cut -d. -f2)
+            local patch=$(echo "$st_version" | cut -d. -f3)
+            
+            if [ "$major" -gt 1 ] || ([ "$major" -eq 1 ] && [ "$minor" -gt 13 ]) || ([ "$major" -eq 1 ] && [ "$minor" -eq 13 ] && [ "$patch" -ge 5 ]); then
+                print_warning "ST 版本 >= 1.13.5，该修复已被官方合并，跳过此步骤"
+                echo ""
             else
-                # 在 ttl: false 行后插入 expiredInterval: 0,
-                sed -i '/ttl: false, \/\/ Never expire/a\        expiredInterval: 0,' "$users_js"
-                if [ $? -eq 0 ]; then
-                    print_success "已修改 users.js"
-                    ((success_count++))
+                # 执行修改
+                local success_count=0
+                
+                # 修改 users.js
+                local users_js="${ST_DIR}/src/users.js"
+                if [ -f "$users_js" ]; then
+                    print_info "备份 users.js..."
+                    create_backup "$users_js" "users_js"
+                    
+                    print_info "修改 users.js..."
+                    
+                    # 检查是否已经存在 expiredInterval
+                    if grep -q "ttl: false, // Never expire" "$users_js"; then
+                        # 检查下一行是否已经是 expiredInterval: 0,
+                        if grep -A 1 "ttl: false, // Never expire" "$users_js" | grep -q "expiredInterval: 0,"; then
+                            print_warning "users.js 已经包含 expiredInterval 配置，跳过"
+     else
+                            # 在 ttl: false 行后插入 expiredInterval: 0,
+                            sed -i '/ttl: false, \/\/ Never expire/a\        expiredInterval: 0,' "$users_js"
+                            if [ $? -eq 0 ]; then
+                                print_success "已修改 users.js"
+                                ((success_count++))
+                            else
+                                print_error "修改 users.js 失败"
+                            fi
+                        fi
+                    else
+                        print_warning "未找到 'ttl: false, // Never expire' 行"
+                    fi
                 else
-                    print_error "修改 users.js 失败"
+                    print_warning "users.js 不存在: $users_js"
+                fi
+                
+                # 修改 characters.js
+                local characters_js="${ST_DIR}/src/endpoints/characters.js"
+                if [ -f "$characters_js" ]; then
+                    print_info "备份 characters.js..."
+                    create_backup "$characters_js" "characters_js"
+                    
+                    print_info "修改 characters.js..."
+                    
+                    # 检查是否已经存在 expiredInterval
+                    if grep -q "forgiveParseErrors: true," "$characters_js"; then
+                        # 检查下一行是否已经是 expiredInterval: 0,
+                        if grep -A 1 "forgiveParseErrors: true," "$characters_js" | grep -q "expiredInterval: 0,"; then
+                            print_warning "characters.js 已经包含 expiredInterval 配置，跳过"
+                        else
+                            # 在 forgiveParseErrors: true, 行后插入 expiredInterval: 0,
+                            sed -i '/forgiveParseErrors: true,/a\            expiredInterval: 0,' "$characters_js"
+                            if [ $? -eq 0 ]; then
+                                print_success "已修改 characters.js"
+                                ((success_count++))
+                            else
+                                print_error "修改 characters.js 失败"
+                            fi
+                        fi
+                    else
+                        print_warning "未找到 'forgiveParseErrors: true,' 行"
+                    fi
+                else
+                    print_warning "characters.js 不存在: $characters_js"
+                fi
+                
+                echo ""
+                if [ $success_count -gt 0 ]; then
+                    print_success "步骤 1 完成！内存优化修改已应用"
+                else
+                    print_warning "步骤 1: 未进行任何修改"
                 fi
             fi
-        else
-            print_warning "未找到 'ttl: false, // Never expire' 行"
         fi
-    else
-        print_warning "users.js 不存在: $users_js"
-    fi
-    
-    # 修改 characters.js
-    local characters_js="${ST_DIR}/src/endpoints/characters.js"
-    if [ -f "$characters_js" ]; then
-        print_info "备份 characters.js..."
-        create_backup "$characters_js" "characters_js"
-        
-        print_info "修改 characters.js..."
-        
-        # 检查是否已经存在 expiredInterval
-        if grep -q "forgiveParseErrors: true," "$characters_js"; then
-            # 检查下一行是否已经是 expiredInterval: 0,
-            if grep -A 1 "forgiveParseErrors: true," "$characters_js" | grep -q "expiredInterval: 0,"; then
-                print_warning "characters.js 已经包含 expiredInterval 配置，跳过"
-            else
-                # 在 forgiveParseErrors: true, 行后插入 expiredInterval: 0,
-                sed -i '/forgiveParseErrors: true,/a\            expiredInterval: 0,' "$characters_js"
-                if [ $? -eq 0 ]; then
-                    print_success "已修改 characters.js"
-                    ((success_count++))
-                else
-                    print_error "修改 characters.js 失败"
-                fi
-            fi
-        else
-            print_warning "未找到 'forgiveParseErrors: true,' 行"
-        fi
-    else
-        print_warning "characters.js 不存在: $characters_js"
     fi
     
     echo ""
-    if [ $success_count -gt 0 ]; then
-        print_success "内存优化完成！请重启 SillyTavern 以应用更改"
+    print_title "[2/2] 修改启动脚本内存限制"
+    
+    print_info "此步骤将修改 start.sh 或 start.bat 中的内存限制，提高 SillyTavern 可使用的内存上限"
+    echo ""
+    
+    # 让用户选择环境
+    echo "${BOLD}${CYAN}请选择您的环境:${NC}"
+    echo "1. Termux/Linux (修改 start.sh)"
+    echo "2. Windows (修改 start.bat)"
+    echo "0. 跳过此步骤"
+    echo ""
+    echo -ne "${YELLOW}请输入选项 [0-2]: ${NC}"
+    read -r env_choice
+    
+    if [ "$env_choice" = "0" ]; then
+        print_info "已跳过步骤 2"
     else
-        print_warning "未进行任何修改"
+        local start_file=""
+        
+        case $env_choice in
+            1)
+                start_file="${ST_DIR}/start.sh"
+                if [ ! -f "$start_file" ]; then
+                    print_error "start.sh 不存在: $start_file"
+                else
+                    # 执行修改，默认 4096MB
+                    local memory_size=4096
+                    
+                    print_info "将内存限制设置为: ${memory_size}MB"
+                    
+                    # 备份
+                    print_info "备份启动脚本..."
+                    create_backup "$start_file" "$(basename "$start_file")"
+                    
+                    # 修改文件
+                    print_info "修改内存限制..."
+                    
+                    # 检查是否已经有 --max-old-space-size 参数
+                    if grep -q "--max-old-space-size" "$start_file"; then
+                        # 替换现有的内存限制
+                        sed -i "s/--max-old-space-size=[0-9]*/--max-old-space-size=${memory_size}/g" "$start_file"
+                    else
+                        # 添加新的内存限制参数
+                        sed -i "s/node \"server.js\"/node --max-old-space-size=${memory_size} \"server.js\"/g" "$start_file"
+                    fi
+                    
+                    if [ $? -eq 0 ]; then
+                        print_success "步骤 2 完成！内存限制已修改为: ${memory_size}MB"
+                    else
+                        print_error "步骤 2: 内存限制修改失败"
+                    fi
+                fi
+                ;;
+            2)
+                start_file="${ST_DIR}/start.bat"
+                if [ ! -f "$start_file" ]; then
+                    print_error "start.bat 不存在: $start_file"
+                else
+                    # 执行修改，默认 4096MB
+                    local memory_size=4096
+                    
+                    print_info "将内存限制设置为: ${memory_size}MB"
+                    
+                    # 备份
+                    print_info "备份启动脚本..."
+                    create_backup "$start_file" "$(basename "$start_file")"
+                    
+                    # 修改文件
+                    print_info "修改内存限制..."
+                    
+                    # 检查是否已经有 --max-old-space-size 参数
+                    if grep -q "--max-old-space-size" "$start_file"; then
+                        # 替换现有的内存限制
+                        sed -i "s/--max-old-space-size=[0-9]*/--max-old-space-size=${memory_size}/g" "$start_file"
+                    else
+                        # 添加新的内存限制参数
+                        sed -i "s/node server.js/node --max-old-space-size=${memory_size} server.js/g" "$start_file"
+                    fi
+                    
+                    if [ $? -eq 0 ]; then
+                        print_success "步骤 2 完成！内存限制已修改为: ${memory_size}MB"
+                    else
+                        print_error "步骤 2: 内存限制修改失败"
+                    fi
+                fi
+                ;;
+            *)
+                print_error "无效的选项，已跳过步骤 2"
+                ;;
+        esac
     fi
     
+    echo ""
+    print_success "二合一 Never OOM 操作完成！"
+    print_info "请重启 SillyTavern 以应用所有更改"
     echo ""
     ask_confirm "按回车键继续..." "y"
 }
@@ -1616,199 +1520,11 @@ update_model_list() {
 }
 
 
-# 优化功能 5: 解除所有模型能力限制
-remove_model_restrictions() {
-    print_title "强解所有模型多模态限制"
-    
-    print_risk "警告！这是一个未经充分测试的风险操作"
-    print_info "修改检查模型是否有多模态能力的函数，让其直接返回true，从而绕过酒馆限制，允许向任意模型发送图片，视频和音频"
-    echo ""
-    print_warning "此操作会直接修改 ST 核心文件，可能导致向不支持多模态的模型发送图片/视频时出错，以及其他任何不可预期的错误"
-    echo ""
-    
-    if ! ask_confirm "确认执行此风险操作吗?"; then
-        print_info "操作已取消"
-        ask_confirm "按回车键继续..." "y"
-        return
-    fi
-    
-    print_warning "请再次确认：此操作有风险！"
-    if ! ask_confirm "真的要继续吗?"; then
-        print_info "操作已取消"
-        ask_confirm "按回车键继续..." "y"
-        return
-    fi
-    
-    local openai_js="${ST_DIR}/public/scripts/openai.js"
-    
-    if [ ! -f "$openai_js" ]; then
-        print_error "openai.js 不存在: $openai_js"
-        ask_confirm "按回车键继续..." "y"
-        return 1
-    fi
-    
-    # 备份
-    print_info "备份 openai.js..."
-    create_backup "$openai_js" "openai_js"
-    
-    local success_count=0
-    
-    # 修改 isImageInliningSupported 函数
-    print_info "修改图片内联支持检测..."
-    if grep -q "export function isImageInliningSupported()" "$openai_js"; then
-        # 在函数定义后添加 return true;
-        sed -i '/export function isImageInliningSupported()/a\    return true;' "$openai_js"
-        if [ $? -eq 0 ]; then
-            print_success "已强制启用图片内联支持"
-            ((success_count++))
-        else
-            print_error "修改图片内联支持失败"
-        fi
-    else
-        print_warning "未找到 isImageInliningSupported 函数"
-    fi
-    
-    # 修改 isVideoInliningSupported 函数
-    print_info "修改视频内联支持检测..."
-    if grep -q "export function isVideoInliningSupported()" "$openai_js"; then
-        # 在函数定义后添加 return true;
-        sed -i '/export function isVideoInliningSupported()/a\    return true;' "$openai_js"
-        if [ $? -eq 0 ]; then
-            print_success "已强制启用视频内联支持"
-            ((success_count++))
-        else
-            print_error "修改视频内联支持失败"
-        fi
-    else
-        print_warning "未找到 isVideoInliningSupported 函数"
-    fi
-    
-    echo ""
-    if [ $success_count -eq 2 ]; then
-        print_success "模型能力限制已解除！请刷新浏览器以应用更改"
-        print_warning "请谨慎使用此功能，确保您的模型支持相应的多模态能力"
-    elif [ $success_count -gt 0 ]; then
-        print_warning "部分修改完成，请检查日志"
-    else
-        print_error "修改失败"
-    fi
-    
-    echo ""
-    ask_confirm "按回车键继续..." "y"
-}
 
-# 优化功能 4: 一键修改内存限制
-modify_memory_limit() {
-    print_title "一键修改内存限制"
-    
-    print_info "此功能将修改 start.sh 或 start.bat 中的内存限制，提高 SillyTavern 可使用的内存上限。如果使用了'优化旧版本 ST 内存占用'后还是频繁出现爆内存问题，可以将内存上限改高"
-    echo ""
-    
-    # 让用户选择环境
-    echo "${BOLD}${CYAN}请选择您的环境:${NC}"
-    echo "1. Termux/Linux (修改 start.sh)"
-    echo "2. Windows (修改 start.bat)"
-    echo "0. 返回"
-    echo ""
-    echo -ne "${YELLOW}请输入选项 [0-2]: ${NC}"
-    read -r env_choice
-    
-    local start_file=""
-    
-    case $env_choice in
-        1)
-            start_file="${ST_DIR}/start.sh"
-            if [ ! -f "$start_file" ]; then
-                print_error "start.sh 不存在: $start_file"
-                ask_confirm "按回车键继续..." "y"
-                return 1
-            fi
-            ;;
-        2)
-            start_file="${ST_DIR}/start.bat"
-            if [ ! -f "$start_file" ]; then
-                print_error "start.bat 不存在: $start_file"
-                ask_confirm "按回车键继续..." "y"
-                return 1
-            fi
-            ;;
-        0)
-            return
-            ;;
-        *)
-            print_error "无效的选项"
-            ask_confirm "按回车键继续..." "y"
-            return
-            ;;
-    esac
-    
-    # 让用户输入预期内存
-    echo ""
-    print_info "请输入预期内存大小（单位: MB）"
-    print_info "推荐值: 2048 (2GB) - 4096 (4GB)"
-    echo -ne "${YELLOW}请输入内存大小 [默认: 4096]: ${NC}"
-    read -r memory_size
-    
-    if [ -z "$memory_size" ]; then
-        memory_size=4096
-    fi
-    
-    # 验证输入是否为数字
-    if ! [[ "$memory_size" =~ ^[0-9]+$ ]]; then
-        print_error "无效的内存大小: $memory_size"
-        ask_confirm "按回车键继续..." "y"
-        return 1
-    fi
-    
-    print_info "将内存限制设置为: ${memory_size}MB"
-    
-    if ! ask_confirm "确认修改内存限制吗?"; then
-        print_info "操作已取消"
-        ask_confirm "按回车键继续..." "y"
-        return
-    fi
-    
-    # 备份
-    print_info "备份启动脚本..."
-    create_backup "$start_file" "$(basename "$start_file")"
-    
-    # 修改文件
-    print_info "修改内存限制..."
-    
-    if [ "$env_choice" = "1" ]; then
-        # 修改 start.sh
-        # 检查是否已经有 --max-old-space-size 参数
-        if grep -q "--max-old-space-size" "$start_file"; then
-            # 替换现有的内存限制
-            sed -i "s/--max-old-space-size=[0-9]*/--max-old-space-size=${memory_size}/g" "$start_file"
-        else
-            # 添加新的内存限制参数
-            sed -i "s/node \"server.js\"/node --max-old-space-size=${memory_size} \"server.js\"/g" "$start_file"
-        fi
-    else
-        # 修改 start.bat
-        # 检查是否已经有 --max-old-space-size 参数
-        if grep -q "--max-old-space-size" "$start_file"; then
-            # 替换现有的内存限制
-            sed -i "s/--max-old-space-size=[0-9]*/--max-old-space-size=${memory_size}/g" "$start_file"
-        else
-            # 添加新的内存限制参数
-            sed -i "s/node server.js/node --max-old-space-size=${memory_size} server.js/g" "$start_file"
-        fi
-    fi
-    
-    if [ $? -eq 0 ]; then
-        print_success "内存限制已修改为: ${memory_size}MB"
-        print_info "请重启 SillyTavern 以应用更改"
-    else
-        print_error "内存限制修改失败"
-    fi
-    
-    echo ""
-    ask_confirm "按回车键继续..." "y"
-}
 
-# 优化功能 4: 修改备份数量
+
+
+# 优化功能 3: 修改备份数量
 modify_backup_count() {
     print_title "修改备份数量"
     
@@ -1903,7 +1619,6 @@ show_main_menu() {
     echo "${BOLD}${CYAN}请选择功能类别:${NC}"
     echo "1. 修复功能"
     echo "2. 优化功能"
-    echo "3. 备份功能"
     echo ""
     echo "0. 退出"
     echo ""
@@ -1913,16 +1628,15 @@ show_fix_menu() {
     clear
     print_title "修复功能"
     
-    echo "${BOLD}${CYAN}请选择要修复的问题:${NC}"
-    echo "1. 无法安装node包，或者缺少node包启动不了酒馆"
-    echo "2. UI 主题（美化）选错了，卡死进不去酒馆"
-    echo "3. 扩展在酒馆里卸载不掉"
-    echo "4. 酒馆端口和别的东西冲突了，开不起来"
-    echo "5. 聊天文件太大，一打开酒馆加载那个聊天就卡死"
-    echo "6. 酒馆更新不了，提示什么什么merge或者branch"
-    echo "7. 1.13.5之前的酒馆总是爆内存"
-    echo "8. ${RED}1.14.0之前的酒馆无法给Gemini 3系列模型发图片 (风险)${NC}"
-    echo "9. ${RED}1.15.0无限 ForbiddenError: Invalid CSRF token(风险)${NC}"
+    echo "${BOLD}${CYAN}请选择:${NC}"
+    echo "1. 修复Node包问题无法启动酒馆"
+    echo "2. 修复美化卡死进不去酒馆，进不去酒馆改不了美化死循环"
+    echo "3. 强制删除扩展"
+    echo "4. 修复酒馆端口冲突"
+    echo "5. 修复聊天文件太大，一进酒馆自动加载聊天就卡死"
+    echo "6. 解决酒馆分支不对或因本地修改而无法更新，强制更新酒馆"
+    echo "7. 二合一 Never OOM"
+    echo "8. ${RED}（风险）允许给Gemini 3.0系列模型发图${NC}"
     echo ""
     echo "0. 返回主菜单"
     echo ""
@@ -1932,33 +1646,22 @@ show_optimize_menu() {
     clear
     print_title "优化功能"
     
-    echo "${BOLD}${CYAN}请选择功能:${NC}"
+    echo "${BOLD}${CYAN}请选择:${NC}"
     echo "1. 解除聊天文件大小限制"
-    echo "2. 让旧版本酒馆也能选最新Gemini和Claude模型"
-    echo "3. 修改酒馆内存限制"
-    echo "4. 修改备份保留数量，减小酒馆空间占用"
-    echo "5. ${RED}强解所有模型的多模态限制 (风险)${NC}"
+    echo "2. 插头里增加最新Gemini和Claude模型"
+    echo "3. 减少酒馆备份保留数量，减小存储空间占用"
+    echo "4. 启用自动备份"
     echo ""
     echo "0. 返回主菜单"
     echo ""
 }
 
-show_backup_menu() {
-    clear
-    print_title "备份功能"
-    
-    echo "${BOLD}${CYAN}要怎么备份呢？${NC}"
-    echo "1. 进行一次手动备份"
-    echo "2. 启用自动备份"
-    echo ""
-    echo "0. 返回主菜单"
-    echo ""
-}
+
 
 fix_menu_loop() {
     while true; do
         show_fix_menu
-        echo -ne "${YELLOW}请输入选项 [0-9]: ${NC}"
+        echo -ne "${YELLOW}请输入选项 [0-8]: ${NC}"
         read -r choice
         
         case $choice in
@@ -1968,9 +1671,8 @@ fix_menu_loop() {
             4) fix_port_conflict ;;
             5) fix_chat_loading ;;
             6) force_update_st ;;
-            7) optimize_memory_usage ;;
+            7) never_oom ;;
             8) fix_gemini3_media ;;
-            9) disable_csrf_protection ;;
             0) return ;;
             *)
                 print_error "无效的选项"
@@ -1983,15 +1685,14 @@ fix_menu_loop() {
 optimize_menu_loop() {
     while true; do
         show_optimize_menu
-        echo -ne "${YELLOW}请输入选项 [0-5]: ${NC}"
+        echo -ne "${YELLOW}请输入选项 [0-4]: ${NC}"
         read -r choice
         
         case $choice in
             1) remove_chat_size_limit ;;
             2) update_model_list ;;
-            3) modify_memory_limit ;;
-            4) modify_backup_count ;;
-            5) remove_model_restrictions ;;
+            3) modify_backup_count ;;
+            4) auto_backup_setup ;;
             0) return ;;
             *)
                 print_error "无效的选项"
@@ -2001,36 +1702,19 @@ optimize_menu_loop() {
     done
 }
 
-backup_menu_loop() {
-    while true; do
-        show_backup_menu
-        echo -ne "${YELLOW}请输入选项 [0-2]: ${NC}"
-        read -r choice
-        
-        case $choice in
-            1) manual_backup ;;
-            2) auto_backup_setup ;;
-            0) return ;;
-            *)
-                print_error "无效的选项"
-                ask_confirm "按回车键继续..." "y"
-                ;;
-        esac
-    done
-}
+
 
 main_loop() {
     while true; do
         show_main_menu
-        echo -ne "${YELLOW}请输入选项 [0-3]: ${NC}"
+        echo -ne "${YELLOW}请输入选项 [0-2]: ${NC}"
         read -r choice
         
         case $choice in
             1) fix_menu_loop ;;
             2) optimize_menu_loop ;;
-            3) backup_menu_loop ;;
             0)
-                print_info "感谢使用 Foxium，再见！"
+                print_info "再见！"
                 exit 0
                 ;;
             *)
