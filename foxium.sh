@@ -641,7 +641,7 @@ fix_npm_install() {
 fix_theme_freeze() {
     print_title "修复 UI 主题卡死问题"
     
-    print_info "当选择了不兼容或已删除的UI主题(美化)时，酒馆可能会卡死在网页加载期间，无法以正常方式进入并修改美化。本功能在酒馆外部修改美化为默认的Dark Lite"
+    print_info "当选择了不兼容或已删除的UI主题(美化)时，酒馆可能会卡死在网页加载期间，无法以正常方式进入并修改美化。本功能在酒馆外部修改美化为默认的Dark Lite；另外，有问题的自定义CSS可能会导致无法在酒馆网页里点击设置，将其清空，本功能允许手动清空自定义CSS的内容"
     echo ""
     
     if ! ask_confirm "确认执行此操作吗?"; then
@@ -656,10 +656,6 @@ fix_theme_freeze() {
         return 1
     fi
     
-    # 备份
-    print_info "备份 settings.json..."
-    create_backup "$settings_file" "settings"
-    
     # 修改主题设置
     print_info "修改主题设置..."
     
@@ -670,6 +666,16 @@ fix_theme_freeze() {
         print_success "主题已设置为 'Dark Lite'"
     else
         print_error "主题设置失败"
+    fi
+    
+    # 清空 custom_css
+    print_info "清空 custom_css..."
+    sed -i 's/"custom_css":[[:space:]]*"[^"]*"/"custom_css": ""/g' "$settings_file"
+    
+    if [ $? -eq 0 ]; then
+        print_success "custom_css 已清空"
+    else
+        print_error "custom_css 清空失败"
     fi
     
     echo ""
@@ -889,9 +895,6 @@ fix_chat_loading() {
     
     # 修改 settings.json
     if [ -f "$settings_file" ]; then
-        print_info "备份 settings.json..."
-        create_backup "$settings_file" "settings"
-        
         print_info "修改 settings.json 中的 auto_load_chat..."
         
         # 使用 sed 替换 auto_load_chat 设置
@@ -1028,17 +1031,20 @@ fix_gemini3_media() {
     ask_confirm "按回车键继续..." "y"
 }
 
-# 修复功能 7: 强制更新 ST
+# 修复功能 7: 强制更新 ST 或切换版本
 force_update_st() {
-    print_title "强制更新 SillyTavern"
+    print_title "强制更新酒馆或切换版本"
     
-    print_info "此功能将先将酒馆切换到 release 稳定分支（防止酒馆在什么master,main等等奇奇怪怪的分支上），然后git pull --rebase --autostash，覆盖本地修改，强制更新。"
+    print_info "两种功能："
     echo ""
-    echo "适用于酒馆因分支错误或本地有未合并的修改而无法更新的情况。"
-    print_warning "此操作会覆盖本地修改，请确保已备份重要数据"
+    echo "  1. git pull ：切换到 release 分支并拉取最新代码"
+    echo "  2. git switch ：切换到指定的历史版本标签"
+    echo ""
+    echo "适用于酒馆因分支错误或本地有未合并的修改而无法更新的情况，或者用于快速切换版本。"
+    print_warning "此操作会覆盖本地修改，请确保已备份重要数据；酒馆最新版本可能并非最好的版本，更新前请三思"
     echo ""
     
-    if ! ask_confirm "确认执行强制更新吗?"; then
+    if ! ask_confirm "确认继续吗?"; then
         print_info "操作已取消"
         return
     fi
@@ -1047,50 +1053,138 @@ force_update_st() {
     if [ ! -d "${ST_DIR}/.git" ]; then
         print_error "酒馆目录不是 git 仓库！"
         echo ""
-        print_info "此功能仅适用于通过 git 安装的 SillyTavern。如果您使用的是 zip 包安装，请手动下载最新版本。"
+        print_info "此功能仅适用于通过 git 安装的酒馆。压缩包安装的酒馆请手动下载最新版本。"
         echo ""
         ask_confirm "按回车键继续..." "y"
         return 1
     fi
     
-    print_success "检测到 git 仓库"
+    print_success "检测到 git 仓库..."
     
     # 切换到 ST 目录
     cd "$ST_DIR" || return 1
     
-    # 切换到 release 分支
-    print_info "切换到 release 稳定分支..."
-    git checkout release
+    # 让用户选择功能
+    echo ""
+    echo "${BOLD}${CYAN}请选择功能:${NC}"
+    echo "1. 更新（切换到 release 分支并强制更新到最新版本）"
+    echo "2. 切换到指定版本"
+    echo "0. 返回"
+    echo ""
+    echo -ne "${YELLOW}请输入选项 [0-2]: ${NC}"
+    read -r update_choice
     
-    if [ $? -ne 0 ]; then
-        print_error "切换分支失败"
-        echo ""
-        ask_confirm "按回车键继续..." "y"
-        return 1
-    fi
-    
-    print_success "已切换到 release 分支"
-    
-    # 执行强制更新
-    print_info "执行强制更新..."
-    git pull --rebase --autostash
-    
-    if [ $? -eq 0 ]; then
-        print_success "SillyTavern 更新成功！"
-        print_info "建议执行 npm install 以更新依赖"
-        echo ""
-        if ask_confirm "是否现在执行 npm install?"; then
-            print_info "安装依赖..."
-            npm install --registry=https://registry.npmmirror.com
-            if [ $? -eq 0 ]; then
-                print_success "依赖安装成功！"
-            else
-                print_error "依赖安装失败"
+    case $update_choice in
+        1)
+            # git pull 更新
+            print_info "切换到 release 稳定分支..."
+            git checkout release
+            
+            if [ $? -ne 0 ]; then
+                print_error "切换分支失败"
+                echo ""
+                ask_confirm "按回车键继续..." "y"
+                return 1
             fi
-        fi
-    else
-        print_error "更新失败，请检查网络连接或手动更新"
-    fi
+            
+            print_success "已切换到 release 分支"
+            
+            # 执行强制更新
+            print_info "执行强制更新..."
+            git pull --rebase --autostash
+            
+            if [ $? -eq 0 ]; then
+                print_success "SillyTavern 更新成功！"
+                print_info "建议执行 npm install 以更新依赖"
+                echo ""
+                if ask_confirm "是否现在执行 npm install?"; then
+                    print_info "安装依赖..."
+                    npm install --registry=https://registry.npmmirror.com
+                    if [ $? -eq 0 ]; then
+                        print_success "依赖安装成功！"
+                    else
+                        print_error "依赖安装失败"
+                    fi
+                fi
+            else
+                print_error "更新失败，请检查网络连接或手动更新"
+            fi
+            ;;
+        2)
+            # git switch 切换版本
+            echo ""
+            echo "${BOLD}${CYAN}请选择要切换的版本:${NC}"
+            echo "1. 1.13.4"
+            echo "2. 1.14.0"
+            echo "0. 返回"
+            echo ""
+            print_info "若要切换到 1.15.0 ，请使用选项 1"
+            echo ""
+            echo -ne "${YELLOW}请输入选项 [0-2]: ${NC}"
+            read -r version_choice
+            
+            local target_tag=""
+            case $version_choice in
+                1) target_tag="1.13.4" ;;
+                2) target_tag="1.14.0" ;;
+                0)
+                    print_info "操作已取消"
+                    echo ""
+                    ask_confirm "按回车键继续..." "y"
+                    return
+                    ;;
+                *)
+                    print_error "无效的选项"
+                    echo ""
+                    ask_confirm "按回车键继续..." "y"
+                    return
+                    ;;
+            esac
+            
+            print_info "准备切换到版本: $target_tag"
+            
+            # 先 fetch 确保有最新的标签信息
+            print_info "获取远程标签信息..."
+            git fetch --tags
+            
+            # 检查标签是否存在
+            if ! git tag -l | grep -qx "$target_tag"; then
+                print_error "未找到标签: $target_tag"
+                print_info "可能需要检查网络连接或该版本标签不存在"
+                echo ""
+                ask_confirm "按回车键继续..." "y"
+                return 1
+            fi
+            
+            # 切换到指定版本
+            print_info "切换到版本 $target_tag..."
+            git checkout "$target_tag"
+            
+            if [ $? -eq 0 ]; then
+                print_success "已成功切换到版本: $target_tag"
+                print_warning "当前处于 detached HEAD 状态，这是正常的"
+                print_info "建议执行 npm install 以确保依赖匹配"
+                echo ""
+                if ask_confirm "是否现在执行 npm install?"; then
+                    print_info "安装依赖..."
+                    npm install --registry=https://registry.npmmirror.com
+                    if [ $? -eq 0 ]; then
+                        print_success "依赖安装成功！"
+                    else
+                        print_error "依赖安装失败"
+                    fi
+                fi
+            else
+                print_error "切换版本失败"
+            fi
+            ;;
+        0)
+            print_info "操作已取消"
+            ;;
+        *)
+            print_error "无效的选项"
+            ;;
+    esac
     
     echo ""
     ask_confirm "按回车键继续..." "y"
@@ -1109,7 +1203,7 @@ never_oom() {
     echo "  1. 优化旧版本 ST 内存占用（修改 users.js 和 characters.js）"
     echo "  2. 修改启动脚本内存限制（修改 start.sh 或 start.bat）"
     echo ""
-    print_info "两个操作将分别检查并执行，帮助解决酒馆爆内存问题"
+    print_info "两个操作将分别检查并执行，解决酒馆爆内存问题"
     echo ""
     
     if ! ask_confirm "确认执行此操作吗?"; then
@@ -1326,9 +1420,9 @@ remove_chat_size_limit() {
     
     print_info "酒馆默认对聊天记录文件有500mb的大小限制，超出将导致酒馆崩溃。此功能修改 server-main.js 中 bodyParser 的 limit 值，调整聊天记录大小限制，允许酒馆加载更大的聊天记录而不崩溃"
     echo ""
-    echo "由于Nodejs本身有1gb的上限，改成更大的值的效果和1024mb相同"
+    echo "由于Nodejs本身有1gb的上限，本功能将直接设为上限1024mb"
     echo ""
-    echo "适用于某些插件导致聊天记录变得超大的时候（不过我更建议你暂时不用这些插件，一个聊天记录几百mb肯定是bug了）。"
+    echo "适用于某些插件导致聊天记录变得超大的时候，不过我更推荐你先去看看插件作者的教程文档之类的，怎么合理地减小聊天文件大小。"
     echo ""
     
     local server_main="${ST_DIR}/src/server-main.js"
@@ -1349,43 +1443,10 @@ remove_chat_size_limit() {
         current_limit="500mb"
     fi
     
-    echo ""
-    print_info "请输入新的文件大小限制（单位: MB）"
-    print_info "推荐值: 1024 (1GB)"
-    print_warning "上限: 1024 MB"
-    echo -ne "${YELLOW}请输入大小 [默认: 1024]: ${NC}"
-    read -r input_size
+    local new_size=1024
+    print_info "将文件大小限制设置为: ${new_size}mb（Node.js 上限）"
     
-    local new_size
-    if [ -z "$input_size" ]; then
-        new_size=1024
-    else
-        new_size=$input_size
-    fi
-    
-    # 验证输入是否为数字
-    if ! [[ "$new_size" =~ ^[0-9]+$ ]]; then
-        print_error "无效的大小: $new_size（必须是数字）"
-        ask_confirm "按回车键继续..." "y"
-        return 1
-    fi
-    
-    # 检查上限
-    if [ $new_size -gt 1024 ]; then
-        print_error "大小超过上限 1024 MB"
-        ask_confirm "按回车键继续..." "y"
-        return 1
-    fi
-    
-    if [ $new_size -lt 1 ]; then
-        print_error "大小必须至少为 1 MB"
-        ask_confirm "按回车键继续..." "y"
-        return 1
-    fi
-    
-    print_info "将文件大小限制设置为: ${new_size}mb"
-    
-    if ! ask_confirm "确认修改文件大小限制吗?"; then
+    if ! ask_confirm "确认修改吗?"; then
         print_info "操作已取消"
         ask_confirm "按回车键继续..." "y"
         return
@@ -1448,26 +1509,6 @@ update_model_list() {
     print_info "此功能将在 index.html 中添加最新的Gemini和Claude模型，允许旧版本酒馆直接选择gemini 3系列模型或claude 4.5系列模型"
     echo ""
     
-    if ! ask_confirm "确认执行此操作吗?"; then
-        print_info "操作已取消"
-        ask_confirm "按回车键继续..." "y"
-        return
-    fi
-    
-    local index_html="${ST_DIR}/public/index.html"
-    
-    if [ ! -f "$index_html" ]; then
-        print_error "index.html 不存在: $index_html"
-        ask_confirm "按回车键继续..." "y"
-        return 1
-    fi
-    
-    # 备份
-    print_info "备份 index.html..."
-    create_backup "$index_html" "index_html"
-    
-    local success_count=0
-    
     # 添加 Google Gemini 模型
     print_info "添加 Google Gemini 模型..."
     if grep -q '<select id="model_google_select">' "$index_html"; then
@@ -1496,7 +1537,7 @@ update_model_list() {
             print_warning "Claude 模型已存在，跳过"
         else
             # 在 <select id="model_claude_select"> 后添加新模型
-            sed -i '/<select id="model_claude_select">/a\                                <optgroup label="Added by Foxium">\n                                    <option value="claude-opus-4-5">claude-opus-4-5</option>\n                                    <option value="claude-opus-4-5-20251101">claude-opus-4-5-20251101</option>\n                                    <option value="claude-sonnet-4-5">claude-sonnet-4-5</option>\n                                    <option value="claude-sonnet-4-5-20250929">claude-sonnet-4-5-20250929</option>\n                                    <option value="claude-haiku-4-5">claude-haiku-4-5</option>\n                                    <option value="claude-haiku-4-5-20251001">claude-haiku-4-5-20251001</option>\n                                </optgroup>' "$index_html"
+            sed -i '/<select id="model_claude_select">/a\                                <optgroup label="Added by Foxium">\n                                    <option value="claude-opus-4-6">claude-opus-4-6</option>\n                                    <option value="claude-opus-4-6-20260205">claude-opus-4-6-20260205</option>\n                                    <option value="claude-opus-4-5">claude-opus-4-5</option>\n                                    <option value="claude-opus-4-5-20251101">claude-opus-4-5-20251101</option>\n                                    <option value="claude-sonnet-4-5">claude-sonnet-4-5</option>\n                                    <option value="claude-sonnet-4-5-20250929">claude-sonnet-4-5-20250929</option>\n                                    <option value="claude-haiku-4-5">claude-haiku-4-5</option>\n                                    <option value="claude-haiku-4-5-20251001">claude-haiku-4-5-20251001</option>\n                                </optgroup>' "$index_html"
             if [ $? -eq 0 ]; then
                 print_success "已添加 Claude 模型"
                 ((success_count++))
@@ -1634,7 +1675,7 @@ show_fix_menu() {
     echo "3. 强制删除扩展"
     echo "4. 修复酒馆端口冲突"
     echo "5. 修复聊天文件太大，一进酒馆自动加载聊天就卡死"
-    echo "6. 解决酒馆分支不对或因本地修改而无法更新，强制更新酒馆"
+    echo "6. 解决酒馆分支不对或因本地修改而无法更新，强制更新或切换酒馆版本"
     echo "7. 二合一 Never OOM"
     echo "8. ${RED}（风险）允许给Gemini 3.0系列模型发图${NC}"
     echo ""
