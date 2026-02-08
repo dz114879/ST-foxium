@@ -1676,7 +1676,7 @@ show_fix_menu() {
     echo "4. 修复酒馆端口冲突"
     echo "5. 修复聊天文件太大，一进酒馆自动加载聊天就卡死"
     echo "6. 解决酒馆分支不对或因本地修改而无法更新，强制更新或切换酒馆版本"
-    echo "7. 二合一 Never OOM"
+    echo "7. 二合一 Never OOM (爆内存修复)"
     echo "8. ${RED}（风险）允许给Gemini 3.0系列模型发图${NC}"
     echo ""
     echo "0. 返回主菜单"
