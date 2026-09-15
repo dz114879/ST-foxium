@@ -27,8 +27,6 @@ source "./lib/gemini_media.sh"
 source "./lib/config_editor.sh"
 # shellcheck source=./lib/settings_editor.sh
 source "./lib/settings_editor.sh"
-# shellcheck source=./lib/model_editor.sh
-source "./lib/model_editor.sh"
 # shellcheck source=./lib/chat_limit.sh
 source "./lib/chat_limit.sh"
 # shellcheck source=./lib/auto_backup.sh
@@ -69,7 +67,7 @@ show_editor_menu() {
     print_title "编辑器"
     printf '1. config.yaml 编辑器%s\n' "$(format_dependency_status "yq" "$YQ_AVAILABLE")"
     printf '2. settings.json 编辑器%s\n' "$(format_dependency_status "jq" "$JQ_AVAILABLE")"
-    printf '%s\n' "3. Claude/Gemini 模型列表修改器"
+    printf '%s\n' "3. [已弃用] Claude/Gemini 模型列表修改器"
     printf '\n'
     printf '%s\n' "0. 返回主菜单"
     printf '\n'
@@ -104,6 +102,16 @@ fix_menu_loop() {
     done
 }
 
+show_model_editor_deprecated() {
+    print_title "功能已弃用"
+    print_warn "Claude/Gemini 模型列表修改器已弃用。"
+    print_info "请改用 SillyTavern-CustomModels 插件："
+    printf '%s\n' "  https://github.com/LenAnderson/SillyTavern-CustomModels"
+    print_info "此前用本功能写入 public/index.html 的旧条目，请手动删除。"
+    printf '\n'
+    press_enter_to_continue
+}
+
 editor_menu_loop() {
     while true; do
         show_editor_menu
@@ -112,7 +120,7 @@ editor_menu_loop() {
         case "$choice" in
             1) config_editor_menu ;;
             2) settings_editor_menu ;;
-            3) model_editor_menu ;;
+            3) show_model_editor_deprecated ;;
             0) return ;;
             *)
                 print_error "无效的选项"

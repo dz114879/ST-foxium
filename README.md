@@ -19,7 +19,7 @@ FFSS (Foxium V2) 是一个面向 SillyTavern 的交互式 Bash 工具，提供�
 
 - `config.yaml` 编辑器
 - `settings.json` 编辑器
-- Claude/Gemini 模型列表修改器
+- [已弃用] Claude/Gemini 模型列表修改器（改用 [SillyTavern-CustomModels](https://github.com/LenAnderson/SillyTavern-CustomModels) 插件）
 
 ### 3. 优化功能
 
