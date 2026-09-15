@@ -62,3 +62,15 @@ chmod +x ffss.sh
 - 启用“自动备份”后的启动前备份：保存在启动脚本所在目录下的 `foxiumV2/STbackupF/auto_backup_<时间戳>/` 中。以默认放在 ST 根目录的 `start.sh` / `Start.bat` / `start.bat` 为例，路径通常就是 `./foxiumV2/STbackupF/auto_backup_<时间戳>/`。
 
 如果找不到备份，优先检查上面这两个目录。
+
+---
+
+## 开发：运行测试
+
+测试使用 [bats-core](https://github.com/bats-core/bats-core)，只在本机运行，没有 CI：
+
+```bash
+bats tests/
+```
+
+其中一个用例会检查 `build/ffss.sh` 是否与 `lib/` 同步。改完 `lib/` 如果忘了重新生成发布文件，它会直接失败——这是唯一会静默把旧代码发给用户的失误。
