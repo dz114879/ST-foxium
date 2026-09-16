@@ -24,6 +24,18 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
+read_total_memory_gb() {
+    local meminfo="/proc/meminfo"
+
+    [[ -r "$meminfo" ]] || return 1
+    awk '/^MemTotal:/ { printf "%.1f", $2 / 1048576; exit }' "$meminfo"
+}
+
+read_node_arch() {
+    command_exists node || return 1
+    node -p "process.arch" 2>/dev/null
+}
+
 clear_screen() {
     [[ -t 1 ]] || return 0
 

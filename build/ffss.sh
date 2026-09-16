@@ -2,22 +2,23 @@
 
 ################################################################################
 #  File:  ./foxiumV2/main.sh
-#  Bundle Date: 2026-04-21 11:31:49
+#  Bundle Date: 2026-09-16 21:06:59
 ################################################################################
 
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd -P)"
 FOXIUM_ROOT="$SCRIPT_DIR"
+
 if [[ ! -d "$FOXIUM_ROOT/lib" && -d "$SCRIPT_DIR/../lib" ]]; then
     FOXIUM_ROOT="$(cd "$SCRIPT_DIR/.." && pwd -P)"
 fi
+
 cd "$FOXIUM_ROOT" || exit 1
+
 # shellcheck source=./lib/common.sh
-
-
 ################################################################################
 #  File:  foxiumV2/./lib/common.sh
-#  Bundle Date: 2026-04-21 11:31:49
+#  Bundle Date: 2026-09-16 21:06:59
 ################################################################################
 
 
@@ -30,6 +31,7 @@ CYAN=$'\033[0;36m'
 DIM=$'\033[2m'
 NC=$'\033[0m'
 BOLD=$'\033[1m'
+
 ST_DIR="${ST_DIR:-}"
 ST_VERSION="${ST_VERSION:-}"
 USER_NAME="${USER_NAME:-default-user}"
@@ -39,39 +41,62 @@ BACKUP_SESSION_DIR="${BACKUP_SESSION_DIR:-}"
 JQ_AVAILABLE="${JQ_AVAILABLE:-0}"
 YQ_AVAILABLE="${YQ_AVAILABLE:-0}"
 YQ_FLAVOR="${YQ_FLAVOR:-}"
+
 command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
+
+read_total_memory_gb() {
+    local meminfo="/proc/meminfo"
+
+    [[ -r "$meminfo" ]] || return 1
+    awk '/^MemTotal:/ { printf "%.1f", $2 / 1048576; exit }' "$meminfo"
+}
+
+read_node_arch() {
+    command_exists node || return 1
+    node -p "process.arch" 2>/dev/null
+}
+
 clear_screen() {
     [[ -t 1 ]] || return 0
+
     if command_exists clear; then
         clear
     fi
 }
+
 print_info() {
     printf '%b\n' "${BLUE}[信息]${NC} $*"
 }
+
 print_success() {
     printf '%b\n' "${GREEN}[成功]${NC} $*"
 }
+
 print_warn() {
     printf '%b\n' "${YELLOW}[警告]${NC} $*"
 }
+
 print_error() {
     printf '%b\n' "${RED}[错误]${NC} $*"
 }
+
 print_risk() {
     printf '%b\n' "${RED}${BOLD}[风险]${NC} $*"
 }
+
 print_title() {
     printf '\n%b\n' "${BOLD}${CYAN}========================================${NC}"
     printf '%b\n' "${BOLD}${CYAN}$1${NC}"
     printf '%b\n\n' "${BOLD}${CYAN}========================================${NC}"
 }
+
 press_enter_to_continue() {
     printf '%b' "${YELLOW}按回车键继续...${NC}"
     read -r _
 }
+
 prompt_choice() {
     local prompt="$1"
     local __resultvar="$2"
@@ -80,6 +105,7 @@ prompt_choice() {
     read -r response
     printf -v "$__resultvar" '%s' "$response"
 }
+
 ask_confirm() {
     local prompt="$1"
     local default="${2:-n}"
@@ -97,32 +123,37 @@ ask_confirm() {
         response="$(trim_whitespace "${response:-$default}")"
 
         case "${response,,}" in
-            y | yes) return 0 ;;
-            n | no) return 1 ;;
+            y|yes) return 0 ;;
+            n|no) return 1 ;;
             *)
                 print_warn "请输入 y 或 n。"
                 ;;
         esac
     done
 }
+
 trim_whitespace() {
     local value="$1"
     value="${value#"${value%%[![:space:]]*}"}"
     value="${value%"${value##*[![:space:]]}"}"
     printf '%s' "$value"
 }
+
 to_lower() {
     printf '%s' "${1,,}"
 }
+
 is_positive_integer() {
-    [[ "$1" =~ ^[0-9]+$ ]] && ((10#$1 > 0))
+    [[ "$1" =~ ^[0-9]+$ ]] && (( 10#$1 > 0 ))
 }
+
 random_port() {
     printf '%s' "$((10000 + RANDOM % 39152))"
 }
+
 is_risky_port() {
     case "$1" in
-        20 | 21 | 22 | 23 | 25 | 53 | 80 | 110 | 123 | 143 | 443 | 465 | 587 | 993 | 995 | 1433 | 1521 | 2049 | 2375 | 2376 | 3000 | 3306 | 3389 | 5432 | 5672 | 5900 | 6379 | 8080 | 8443 | 9200)
+        20|21|22|23|25|53|80|110|123|143|443|465|587|993|995|1433|1521|2049|2375|2376|3000|3306|3389|5432|5672|5900|6379|8080|8443|9200)
             return 0
             ;;
         *)
@@ -130,6 +161,7 @@ is_risky_port() {
             ;;
     esac
 }
+
 canonical_path() {
     local path="$1"
 
@@ -147,6 +179,7 @@ canonical_path() {
 
     return 1
 }
+
 make_temp_next_to() {
     local target="$1"
     local target_dir
@@ -156,47 +189,51 @@ make_temp_next_to() {
         mktemp "${target_dir}/.foxium.XXXXXX"
     else
         local temp_file="${target_dir}/.foxium.$$.$RANDOM"
-        : >"$temp_file"  || return 1
+        : > "$temp_file" || return 1
         printf '%s' "$temp_file"
     fi
 }
+
 sanitize_version_part() {
     local part="${1//[^0-9]/}"
     printf '%s' "${part:-0}"
 }
+
 parse_version_triplet() {
     local cleaned="${1%%-*}"
     cleaned="${cleaned%%+*}"
     local major minor patch extra
-    IFS='.' read -r major minor patch extra <<<"$cleaned"
+    IFS='.' read -r major minor patch extra <<< "$cleaned"
     printf '%s %s %s' \
         "$(sanitize_version_part "$major")" \
         "$(sanitize_version_part "$minor")" \
         "$(sanitize_version_part "$patch")"
 }
+
 compare_versions() {
     local left_major left_minor left_patch
     local right_major right_minor right_patch
 
-    read -r left_major left_minor left_patch <<<"$( parse_version_triplet "$1")"
-    read -r right_major right_minor right_patch <<<"$( parse_version_triplet "$2")"
+    read -r left_major left_minor left_patch <<< "$(parse_version_triplet "$1")"
+    read -r right_major right_minor right_patch <<< "$(parse_version_triplet "$2")"
 
-    if ((10#$left_major > 10#$right_major)); then
+    if (( 10#$left_major > 10#$right_major )); then
         printf '%s' "1"
-    elif ((10#$left_major < 10#$right_major)); then
+    elif (( 10#$left_major < 10#$right_major )); then
         printf '%s' "-1"
-    elif ((10#$left_minor > 10#$right_minor)); then
+    elif (( 10#$left_minor > 10#$right_minor )); then
         printf '%s' "1"
-    elif ((10#$left_minor < 10#$right_minor)); then
+    elif (( 10#$left_minor < 10#$right_minor )); then
         printf '%s' "-1"
-    elif ((10#$left_patch > 10#$right_patch)); then
+    elif (( 10#$left_patch > 10#$right_patch )); then
         printf '%s' "1"
-    elif ((10#$left_patch < 10#$right_patch)); then
+    elif (( 10#$left_patch < 10#$right_patch )); then
         printf '%s' "-1"
     else
         printf '%s' "0"
     fi
 }
+
 check_st_version() {
     local operator="$1"
     local target_version="${2:-0}.${3:-0}.${4:-0}"
@@ -209,18 +246,19 @@ check_st_version() {
     comparison="$(compare_versions "$ST_VERSION" "$target_version")"
 
     case "$operator" in
-        '<' | -lt) [[ "$comparison" == "-1" ]] ;;
-        '<=' | -le) [[ "$comparison" == "-1" || "$comparison" == "0" ]] ;;
-        '=' | '==' | -eq) [[ "$comparison" == "0" ]] ;;
-        '!=' | -ne) [[ "$comparison" != "0" ]] ;;
-        '>=' | -ge) [[ "$comparison" == "1" || "$comparison" == "0" ]] ;;
-        '>' | -gt) [[ "$comparison" == "1" ]] ;;
+        '<'|-lt) [[ "$comparison" == "-1" ]] ;;
+        '<='|-le) [[ "$comparison" == "-1" || "$comparison" == "0" ]] ;;
+        '='|'=='|-eq) [[ "$comparison" == "0" ]] ;;
+        '!='|-ne) [[ "$comparison" != "0" ]] ;;
+        '>='|-ge) [[ "$comparison" == "1" || "$comparison" == "0" ]] ;;
+        '>'|-gt) [[ "$comparison" == "1" ]] ;;
         *)
             print_error "未知的版本比较操作符: $operator"
             return 1
             ;;
     esac
 }
+
 format_dependency_status() {
     local tool_name="$1"
     local available="$2"
@@ -231,6 +269,7 @@ format_dependency_status() {
         printf ' %b' "${DIM}[未安装 ${tool_name}，不可用]${NC}"
     fi
 }
+
 require_dependency_or_return() {
     local tool_name="$1"
     local available="$2"
@@ -243,6 +282,7 @@ require_dependency_or_return() {
     press_enter_to_continue
     return 1
 }
+
 detect_yq_flavor() {
     if [[ "$YQ_AVAILABLE" != "1" ]] || [[ ! -f "${ST_DIR}/config.yaml" ]]; then
         return 1
@@ -261,6 +301,7 @@ detect_yq_flavor() {
     YQ_FLAVOR=""
     return 1
 }
+
 yaml_read() {
     local expr="$1"
     local file="$2"
@@ -271,6 +312,7 @@ yaml_read() {
         *) return 1 ;;
     esac
 }
+
 yaml_write() {
     local expr="$1"
     local file="$2"
@@ -281,13 +323,14 @@ yaml_write() {
         *) return 1 ;;
     esac
 }
+
 json_update_file() {
     local file="$1"
     local expr="$2"
     local temp_file
     temp_file="$(make_temp_next_to "$file")" || return 1
 
-    if jq "$expr" "$file" >"$temp_file"; then
+    if jq "$expr" "$file" > "$temp_file"; then
         mv "$temp_file" "$file"
         return 0
     fi
@@ -295,6 +338,7 @@ json_update_file() {
     rm -f "$temp_file"
     return 1
 }
+
 insert_line_after_anchor() {
     local file="$1"
     local anchor="$2"
@@ -311,7 +355,7 @@ insert_line_after_anchor() {
         }
         { print }
         END { exit inserted ? 0 : 1 }
-    ' "$file" >"$temp_file"; then
+    ' "$file" > "$temp_file"; then
         mv "$temp_file" "$file"
         return 0
     fi
@@ -319,6 +363,7 @@ insert_line_after_anchor() {
     rm -f "$temp_file"
     return 1
 }
+
 choose_windows_start_script() {
     local __resultvar="$1"
     local -a candidates=()
@@ -363,7 +408,7 @@ choose_windows_start_script() {
     while true; do
         prompt_choice "请选择要修改的文件 [1-2]: " selection
         case "$selection" in
-            1 | 2)
+            1|2)
                 resolved_path="${candidates[$((selection - 1))]}"
                 printf -v "$__resultvar" '%s' "$resolved_path"
                 return 0
@@ -375,18 +420,15 @@ choose_windows_start_script() {
     done
 }
 
-
 ################################################################################
 #  End File:  foxiumV2/./lib/common.sh
+#  Bundle Date: 2026-09-16 21:06:59
 ################################################################################
-
 
 # shellcheck source=./lib/backup.sh
-
-
 ################################################################################
 #  File:  foxiumV2/./lib/backup.sh
-#  Bundle Date: 2026-04-21 11:31:49
+#  Bundle Date: 2026-09-16 21:06:59
 ################################################################################
 
 
@@ -423,6 +465,7 @@ init_backup_session() {
         fi
     done
 }
+
 resolve_backup_destination() {
     local base_name="$1"
     local candidate_path="${BACKUP_SESSION_DIR}/${base_name}"
@@ -439,6 +482,7 @@ resolve_backup_destination() {
 
     printf '%s' "${BACKUP_SESSION_DIR}/${index}_${base_name}"
 }
+
 create_backup() {
     local input_path="$1"
 
@@ -472,28 +516,27 @@ create_backup() {
     return 1
 }
 
-
 ################################################################################
 #  End File:  foxiumV2/./lib/backup.sh
+#  Bundle Date: 2026-09-16 21:06:59
 ################################################################################
-
 
 # shellcheck source=./lib/detect.sh
-
-
 ################################################################################
 #  File:  foxiumV2/./lib/detect.sh
-#  Bundle Date: 2026-04-21 11:31:49
+#  Bundle Date: 2026-09-16 21:06:59
 ################################################################################
 
 
 declare -a ST_CANDIDATES=()
 FOXIUM_JQ_WINDOWS_VERSION="${FOXIUM_JQ_WINDOWS_VERSION:-1.8.1}"
 FOXIUM_YQ_WINDOWS_VERSION="${FOXIUM_YQ_WINDOWS_VERSION:-v4.52.5}"
+
 is_valid_st_dir() {
     local candidate="$1"
     [[ -d "$candidate" && -f "${candidate}/server.js" && -f "${candidate}/package.json" ]]
 }
+
 add_st_candidate() {
     local candidate="$1"
     local resolved_candidate
@@ -513,6 +556,7 @@ add_st_candidate() {
 
     ST_CANDIDATES+=("$resolved_candidate")
 }
+
 scan_candidate_root() {
     local root="$1"
     local candidate
@@ -531,6 +575,7 @@ scan_candidate_root() {
         add_st_candidate "$candidate"
     done
 }
+
 collect_st_candidates() {
     ST_CANDIDATES=()
 
@@ -538,6 +583,7 @@ collect_st_candidates() {
     scan_candidate_root "$(cd "$FOXIUM_ROOT/.." && pwd -P)"
     scan_candidate_root "$(pwd -P)"
 }
+
 prompt_for_st_directory() {
     local user_input resolved_path
 
@@ -571,6 +617,7 @@ prompt_for_st_directory() {
         print_warn "该目录不是有效的 SillyTavern 根目录。"
     done
 }
+
 select_st_directory() {
     collect_st_candidates
 
@@ -592,7 +639,7 @@ select_st_directory() {
         while true; do
             prompt_choice "请选择要使用的目录编号: " selection
 
-            if is_positive_integer "$selection" && ((selection >= 1 && selection <= ${#ST_CANDIDATES[@]})); then
+            if is_positive_integer "$selection" && (( selection >= 1 && selection <= ${#ST_CANDIDATES[@]} )); then
                 ST_DIR="${ST_CANDIDATES[$((selection - 1))]}"
                 print_success "已设置 ST 目录: $ST_DIR"
                 return 0
@@ -604,6 +651,7 @@ select_st_directory() {
 
     prompt_for_st_directory
 }
+
 read_st_version() {
     local package_json="${ST_DIR}/package.json"
 
@@ -629,6 +677,7 @@ read_st_version() {
     print_warn "无法读取 ST 版本。"
     return 1
 }
+
 validate_user_name() {
     local value="$1"
 
@@ -642,6 +691,7 @@ validate_user_name() {
 
     return 0
 }
+
 set_user_directory() {
     local input_user
 
@@ -683,24 +733,27 @@ set_user_directory() {
     print_error "未设置用户目录，脚本无法继续。"
     return 1
 }
+
 is_termux_environment() {
     command_exists pkg && [[ -n "${PREFIX:-}" && "$PREFIX" == *com.termux* ]]
 }
+
 is_windows_git_bash_environment() {
     case "${OSTYPE:-}" in
-        msys* | cygwin*)
+        msys*|cygwin*)
             return 0
             ;;
     esac
 
     case "${MSYSTEM:-}" in
-        MINGW* | UCRT* | CLANG*)
+        MINGW*|UCRT*|CLANG*)
             return 0
             ;;
     esac
 
     return 1
 }
+
 ensure_windows_user_bin_in_path() {
     local user_bin
 
@@ -712,8 +765,8 @@ ensure_windows_user_bin_in_path() {
     mkdir -p "$user_bin" || return 1
 
     case ":$PATH:" in
-        *":$user_bin:"*) ;;
-
+        *":$user_bin:"*)
+            ;;
         *)
             PATH="$user_bin:$PATH"
             ;;
@@ -721,15 +774,16 @@ ensure_windows_user_bin_in_path() {
 
     return 0
 }
+
 resolve_windows_git_bash_arch() {
     local machine_arch
     machine_arch="$(uname -m 2>/dev/null || printf '%s' '')"
 
     case "$machine_arch" in
-        x86_64 | amd64)
+        x86_64|amd64)
             printf '%s' "amd64"
             ;;
-        i686 | i386)
+        i686|i386)
             printf '%s' "386"
             ;;
         *)
@@ -738,6 +792,7 @@ resolve_windows_git_bash_arch() {
             ;;
     esac
 }
+
 windows_git_bash_download_url() {
     local tool_name="$1"
     local tool_arch="$2"
@@ -760,6 +815,7 @@ windows_git_bash_download_url() {
             ;;
     esac
 }
+
 install_windows_git_bash_tool() {
     local tool_name="$1"
     local tool_arch download_url user_bin target_path temp_file
@@ -814,6 +870,7 @@ install_windows_git_bash_tool() {
     print_warn "${tool_name} 安装失败，将继续以不可用状态运行。"
     return 1
 }
+
 detect_optional_tool() {
     local tool_name="$1"
     local __resultvar="$2"
@@ -856,6 +913,7 @@ detect_optional_tool() {
 
     return 1
 }
+
 detect_optional_tools() {
     detect_optional_tool "jq" JQ_AVAILABLE
     detect_optional_tool "yq" YQ_AVAILABLE
@@ -865,6 +923,7 @@ detect_optional_tools() {
         YQ_AVAILABLE="0"
     fi
 }
+
 run_startup_checks() {
     print_title "Foxium V2 启动检查"
 
@@ -900,18 +959,15 @@ run_startup_checks() {
     press_enter_to_continue
 }
 
-
 ################################################################################
 #  End File:  foxiumV2/./lib/detect.sh
+#  Bundle Date: 2026-09-16 21:06:59
 ################################################################################
-
 
 # shellcheck source=./lib/npm_fix.sh
-
-
 ################################################################################
 #  File:  foxiumV2/./lib/npm_fix.sh
-#  Bundle Date: 2026-04-21 11:31:49
+#  Bundle Date: 2026-09-16 21:06:59
 ################################################################################
 
 
@@ -925,43 +981,46 @@ fix_npm_install() {
         return
     fi
 
+    print_info "删除 node_modules 和安装依赖都可能在几十秒内没有任何新输出，这是正常的，不是卡死。"
+    print_info "整个过程中请不要按 Ctrl+C：npm 装到一半被打断，依赖会残缺，酒馆反而更启动不了。"
+    print_info "如果已经打断过：重新运行本功能即可，它会先删干净再重新安装。"
+
     if ! ask_confirm "确认执行此操作吗？" "n"; then
         print_info "操作已取消。"
         press_enter_to_continue
         return
     fi
 
+    local start_seconds=$SECONDS
     if (
         cd "$ST_DIR" || exit 1
 
         if [[ -d "node_modules" ]]; then
-            print_info "删除 node_modules..."
+            print_info "正在删除 node_modules（文件很多，通常 10-60 秒）..."
             rm -rf "node_modules"
         fi
 
-        print_info "使用淘宝镜像重新安装依赖..."
+        print_info "正在使用淘宝镜像重新安装依赖（通常 1-5 分钟，取决于网络）..."
         npm install --registry=https://registry.npmmirror.com
     ); then
-        print_success "依赖已重新安装完成。"
+        print_success "依赖已重新安装完成，耗时 $((SECONDS - start_seconds)) 秒。"
     else
-        print_error "重新安装依赖失败。"
+        print_error "重新安装依赖失败，耗时 $((SECONDS - start_seconds)) 秒。"
+        print_info "如果刚才是按了 Ctrl+C 中断，重新运行本功能即可。"
     fi
 
     press_enter_to_continue
 }
 
-
 ################################################################################
 #  End File:  foxiumV2/./lib/npm_fix.sh
+#  Bundle Date: 2026-09-16 21:06:59
 ################################################################################
-
 
 # shellcheck source=./lib/extension_fix.sh
-
-
 ################################################################################
 #  File:  foxiumV2/./lib/extension_fix.sh
-#  Bundle Date: 2026-04-21 11:31:49
+#  Bundle Date: 2026-09-16 21:06:59
 ################################################################################
 
 
@@ -1050,18 +1109,15 @@ fix_extension_uninstall() {
     press_enter_to_continue
 }
 
-
 ################################################################################
 #  End File:  foxiumV2/./lib/extension_fix.sh
+#  Bundle Date: 2026-09-16 21:06:59
 ################################################################################
-
 
 # shellcheck source=./lib/never_oom.sh
-
-
 ################################################################################
 #  File:  foxiumV2/./lib/never_oom.sh
-#  Bundle Date: 2026-04-21 11:31:49
+#  Bundle Date: 2026-09-16 21:06:59
 ################################################################################
 
 
@@ -1094,6 +1150,7 @@ patch_expired_interval_setting() {
     print_warn "未找到锚点，无法修改 $(basename "$target_file")"
     return 1
 }
+
 update_start_script_memory_limit() {
     local start_file="$1"
     local memory_size="${2:-4096}"
@@ -1129,7 +1186,7 @@ update_start_script_memory_limit() {
             print line
         }
         END { exit updated ? 0 : 1 }
-    ' "$start_file" >"$temp_file"; then
+    ' "$start_file" > "$temp_file"; then
         mv "$temp_file" "$start_file"
         print_success "已把启动脚本内存限制设置为 ${memory_size}MB"
         return 0
@@ -1139,11 +1196,29 @@ update_start_script_memory_limit() {
     print_error "未找到 node server.js 启动行，修改失败。"
     return 1
 }
+
 never_oom() {
     print_title "二合一爆内存修复"
     print_info "此功能会尝试完成两步："
     printf '%s\n' "1. 对旧版本 ST 的 users.js 和 characters.js 加入 expiredInterval: 0"
     printf '%s\n' "2. 为启动脚本增加 --max-old-space-size=4096"
+    printf '\n'
+
+    local total_memory node_arch
+    if total_memory="$(read_total_memory_gb)"; then
+        print_info "设备总内存: ${total_memory} GB"
+    else
+        print_info "设备总内存: 未知"
+    fi
+
+    if node_arch="$(read_node_arch)"; then
+        print_info "node 架构: ${node_arch}"
+        if [[ "$node_arch" == "arm" ]]; then
+            print_warn "当前是 32 位 node：它实际到不了 4096 的堆上限，本次修复很可能不生效，建议换用 64 位 node。"
+        fi
+    else
+        print_info "node 架构: 未知"
+    fi
 
     if ! ask_confirm "确认执行该修复吗？" "n"; then
         print_info "操作已取消。"
@@ -1182,9 +1257,9 @@ never_oom() {
             2)
                 if ! choose_windows_start_script start_file; then
                     print_error "未找到可用的 Windows 启动脚本。"
-            else
+                else
                     update_start_script_memory_limit "$start_file" 4096
-            fi
+                fi
                 break
                 ;;
             0)
@@ -1198,21 +1273,32 @@ never_oom() {
     done
 
     print_success "Never OOM 修复流程已结束。"
+    printf '\n'
+    print_title "如果之后还是爆内存"
+    print_info "崩溃时终端会打印一行「<脚本>: line N: PID 信号 <命令>」，照着分四种情况："
+    printf '%s\n' "1. 那行里没有 --max-old-space-size=4096：这次崩溃的进程没吃到参数，"
+    printf '%s\n' "   要么修改没成功，要么酒馆不是用被改过的启动脚本拉起来的。"
+    printf '%s\n' "2. 那行的信号是 Killed（不是 Aborted）：进程是被系统杀掉的，和堆上限无关，"
+    printf '%s\n' "   继续调大数字没有用，先减少同时运行的程序、缩短上下文。"
+    printf '%s\n' "3. 那行带着 4096，但崩溃前最后几行的内存数字只到 1G 上下：这个进程实际没拿到 4G，"
+    printf '%s\n' "   先确认 node 不是 32 位（本功能开头显示的架构是 arm 就是），"
+    printf '%s\n' "   再确认设备可用内存是不是被其他程序占满了。"
+    printf '%s\n' "4. 崩溃前最后几行的内存数字确实冲到 4096 附近：说明你的酒馆真的吃了 4G 内存，"
+    printf '%s\n' "   这是不正常的，先排查可疑的角色卡 / 聊天记录 / 插件。"
+    printf '\n'
+    print_info "排查不出来时，把本功能开头显示的环境信息和崩溃时那几行一起发出来。"
     press_enter_to_continue
 }
 
-
 ################################################################################
 #  End File:  foxiumV2/./lib/never_oom.sh
+#  Bundle Date: 2026-09-16 21:06:59
 ################################################################################
-
 
 # shellcheck source=./lib/gemini_media.sh
-
-
 ################################################################################
 #  File:  foxiumV2/./lib/gemini_media.sh
-#  Bundle Date: 2026-04-21 11:31:49
+#  Bundle Date: 2026-09-16 21:06:59
 ################################################################################
 
 
@@ -1228,6 +1314,7 @@ array_contains_model() {
         END { exit found ? 0 : 1 }
     ' "$target_file"
 }
+
 fix_gemini3_media() {
     print_title "允许给 Gemini 3 系列模型发图"
     print_risk "此功能会直接修改 public/scripts/openai.js。"
@@ -1272,7 +1359,7 @@ fix_gemini3_media() {
     fi
 
     if ! array_contains_model "$openai_js" "const videoSupportedModels = [" "'gemini-3'"; then
-        if ((modified == 0)); then
+        if (( modified == 0 )); then
             create_backup "$openai_js" || {
                 press_enter_to_continue
                 return
@@ -1288,7 +1375,7 @@ fix_gemini3_media() {
         print_warn "videoSupportedModels 已包含 gemini-3，跳过。"
     fi
 
-    if ((modified > 0)); then
+    if (( modified > 0 )); then
         print_success "Gemini 3 媒体支持修复完成。"
     else
         print_info "没有新的内容需要写入。"
@@ -1297,18 +1384,15 @@ fix_gemini3_media() {
     press_enter_to_continue
 }
 
-
 ################################################################################
 #  End File:  foxiumV2/./lib/gemini_media.sh
+#  Bundle Date: 2026-09-16 21:06:59
 ################################################################################
-
 
 # shellcheck source=./lib/config_editor.sh
-
-
 ################################################################################
 #  File:  foxiumV2/./lib/config_editor.sh
-#  Bundle Date: 2026-04-21 11:31:49
+#  Bundle Date: 2026-09-16 21:06:59
 ################################################################################
 
 
@@ -1326,14 +1410,17 @@ show_config_editor_menu() {
     printf '%s\n' "0. 返回上级"
     printf '\n'
 }
+
 config_editor_file() {
     printf '%s' "${ST_DIR}/config.yaml"
 }
+
 backup_config_editor_file() {
     local config_file
     config_file="$(config_editor_file)"
     create_backup "$config_file"
 }
+
 toggle_config_boolean() {
     local yaml_path="$1"
     local label="$2"
@@ -1375,6 +1462,7 @@ toggle_config_boolean() {
 
     press_enter_to_continue
 }
+
 config_edit_port() {
     local config_file current_port mode new_port
     config_file="$(config_editor_file)"
@@ -1397,10 +1485,10 @@ config_edit_port() {
                 prompt_choice "请输入端口号 [推荐 10000-49151]: " new_port
                 new_port="$(trim_whitespace "$new_port")"
 
-                if ! is_positive_integer "$new_port" || ((10#$new_port < 1 || 10#$new_port > 65535)); then
+                if ! is_positive_integer "$new_port" || (( 10#$new_port < 1 || 10#$new_port > 65535 )); then
                     print_warn "端口必须是 1-65535 的整数。"
                     continue
-            fi
+                fi
                 break
                 ;;
             0)
@@ -1440,6 +1528,7 @@ config_edit_port() {
 
     press_enter_to_continue
 }
+
 config_edit_backup_count() {
     local config_file current_count input_count new_count
     config_file="$(config_editor_file)"
@@ -1474,9 +1563,11 @@ config_edit_backup_count() {
 
     press_enter_to_continue
 }
+
 config_toggle_browser_launch() {
     toggle_config_boolean '.browserLaunch.enabled' '自动启动浏览器'
 }
+
 config_configure_proxy() {
     local config_file current_enabled current_url mode proxy_url escaped_url
     config_file="$(config_editor_file)"
@@ -1499,7 +1590,7 @@ config_configure_proxy() {
                 if [[ -z "$proxy_url" ]]; then
                     print_warn "代理 URL 不能为空。"
                     continue
-            fi
+                fi
 
                 escaped_url="${proxy_url//\\/\\\\}"
                 escaped_url="${escaped_url//\"/\\\"}"
@@ -1508,7 +1599,7 @@ config_configure_proxy() {
                     print_info "操作已取消。"
                     press_enter_to_continue
                     return
-            fi
+                fi
 
                 backup_config_editor_file || {
                     press_enter_to_continue
@@ -1516,9 +1607,9 @@ config_configure_proxy() {
                 }
                 if yaml_write ".requestProxy.enabled = true | .requestProxy.url = \"${escaped_url}\"" "$config_file"; then
                     print_success "代理配置已更新。"
-            else
+                else
                     print_error "代理配置更新失败。"
-            fi
+                fi
 
                 press_enter_to_continue
                 return
@@ -1528,7 +1619,7 @@ config_configure_proxy() {
                     print_info "操作已取消。"
                     press_enter_to_continue
                     return
-            fi
+                fi
 
                 backup_config_editor_file || {
                     press_enter_to_continue
@@ -1536,9 +1627,9 @@ config_configure_proxy() {
                 }
                 if yaml_write '.requestProxy.enabled = false' "$config_file"; then
                     print_success "代理已关闭。"
-            else
+                else
                     print_error "关闭代理失败。"
-            fi
+                fi
 
                 press_enter_to_continue
                 return
@@ -1552,15 +1643,19 @@ config_configure_proxy() {
         esac
     done
 }
+
 config_toggle_disable_csrf() {
     toggle_config_boolean '.disableCsrfProtection' '禁用 CSRF 保护' '关闭 CSRF 保护会降低安全性，只建议在你明确知道风险时使用。'
 }
+
 config_toggle_lazy_load() {
     toggle_config_boolean '.performance.lazyLoadCharacters' '懒加载角色'
 }
+
 config_toggle_server_plugins() {
     toggle_config_boolean '.enableServerPlugins' '服务器插件' '启用服务器插件会扩大服务端代码执行面，请确认插件来源可信。'
 }
+
 config_editor_menu() {
     if ! require_dependency_or_return "yq" "$YQ_AVAILABLE"; then
         return
@@ -1595,18 +1690,15 @@ config_editor_menu() {
     done
 }
 
-
 ################################################################################
 #  End File:  foxiumV2/./lib/config_editor.sh
+#  Bundle Date: 2026-09-16 21:06:59
 ################################################################################
-
 
 # shellcheck source=./lib/settings_editor.sh
-
-
 ################################################################################
 #  File:  foxiumV2/./lib/settings_editor.sh
-#  Bundle Date: 2026-04-21 11:31:49
+#  Bundle Date: 2026-09-16 21:06:59
 ################################################################################
 
 
@@ -1620,9 +1712,11 @@ show_settings_editor_menu() {
     printf '%s\n' "0. 返回上级"
     printf '\n'
 }
+
 settings_file_path() {
     printf '%s' "${USER_DIR}/settings.json"
 }
+
 apply_settings_change() {
     local description="$1"
     local jq_expr="$2"
@@ -1653,6 +1747,7 @@ apply_settings_change() {
 
     press_enter_to_continue
 }
+
 settings_editor_menu() {
     if ! require_dependency_or_return "jq" "$JQ_AVAILABLE"; then
         return
@@ -1675,18 +1770,15 @@ settings_editor_menu() {
     done
 }
 
-
 ################################################################################
 #  End File:  foxiumV2/./lib/settings_editor.sh
+#  Bundle Date: 2026-09-16 21:06:59
 ################################################################################
-
 
 # shellcheck source=./lib/chat_limit.sh
-
-
 ################################################################################
 #  File:  foxiumV2/./lib/chat_limit.sh
-#  Bundle Date: 2026-04-21 11:31:49
+#  Bundle Date: 2026-09-16 21:06:59
 ################################################################################
 
 
@@ -1739,7 +1831,7 @@ remove_chat_size_limit() {
             print line
         }
         END { exit (changed_json && changed_urlencoded) ? 0 : 1 }
-    ' "$server_main" >"$temp_file"; then
+    ' "$server_main" > "$temp_file"; then
         mv "$temp_file" "$server_main"
         print_success "聊天文件大小限制已修改为 1024mb。"
     else
@@ -1750,18 +1842,15 @@ remove_chat_size_limit() {
     press_enter_to_continue
 }
 
-
 ################################################################################
 #  End File:  foxiumV2/./lib/chat_limit.sh
+#  Bundle Date: 2026-09-16 21:06:59
 ################################################################################
-
 
 # shellcheck source=./lib/auto_backup.sh
-
-
 ################################################################################
 #  File:  foxiumV2/./lib/auto_backup.sh
-#  Bundle Date: 2026-04-21 11:31:49
+#  Bundle Date: 2026-09-16 21:06:59
 ################################################################################
 
 
@@ -1769,68 +1858,138 @@ write_shell_auto_backup_block() {
     local output_file="$1"
     local escaped_user="$2"
 
-    cat >"$output_file"  <<EOF
+    cat > "$output_file" <<EOF
 # === FOXIUM AUTO BACKUP START ===
 FOXIUM_USER="${escaped_user}"
-FOXIUM_BACKUP_PARENT_DIR="\$(cd "\$(dirname "\$0")" && pwd)/foxiumV2/STbackupF"
+FOXIUM_ST_ROOT="\$(cd "\$(dirname "\$0")" && pwd)"
+FOXIUM_BACKUP_PARENT_DIR="\${FOXIUM_ST_ROOT}/foxiumV2/STbackupF"
 FOXIUM_BACKUP_TIMESTAMP="\$(date +"%Y%m%d_%H%M%S")"
 FOXIUM_BACKUP_DIR="\${FOXIUM_BACKUP_PARENT_DIR}/auto_backup_\${FOXIUM_BACKUP_TIMESTAMP}"
+FOXIUM_BACKUP_TMP="\${FOXIUM_BACKUP_DIR}.tmp"
+FOXIUM_BACKUP_KEEP=3
 
+# 先复制到 .tmp，确认复制成功后才改名为正式备份并清理旧备份，
+# 任何失败都不会影响上一次的备份。
 mkdir -p "\$FOXIUM_BACKUP_PARENT_DIR"
-for foxium_existing_dir in "\$FOXIUM_BACKUP_PARENT_DIR"/auto_backup_*; do
-    [[ -e "\$foxium_existing_dir" ]] || continue
-    rm -rf "\$foxium_existing_dir"
-done
+rm -rf "\$FOXIUM_BACKUP_TMP"
+mkdir -p "\$FOXIUM_BACKUP_TMP"
 
-mkdir -p "\$FOXIUM_BACKUP_DIR"
+foxium_backup_failed=0
 
 foxium_backup_if_exists() {
     local input_path="\$1"
     local destination_name="\$2"
     if [[ -e "\$input_path" ]]; then
-        cp -R "\$input_path" "\$FOXIUM_BACKUP_DIR/\$destination_name" >/dev/null 2>&1
+        if ! cp -R "\$input_path" "\$FOXIUM_BACKUP_TMP/\$destination_name"; then
+            echo "[Foxium] 备份失败: \$input_path"
+            foxium_backup_failed=1
+        fi
     fi
 }
 
 echo "[Foxium] Running auto backup..."
-foxium_backup_if_exists "data/\${FOXIUM_USER}/worlds" "worlds"
-foxium_backup_if_exists "data/\${FOXIUM_USER}/characters" "characters"
-foxium_backup_if_exists "data/\${FOXIUM_USER}/OpenAI Settings" "OpenAI_Settings"
-foxium_backup_if_exists "data/\${FOXIUM_USER}/QuickReplies" "QuickReplies"
-foxium_backup_if_exists "data/\${FOXIUM_USER}/settings.json" "settings.json"
-echo "[Foxium] Auto backup completed: \${FOXIUM_BACKUP_DIR}"
+foxium_backup_if_exists "\${FOXIUM_ST_ROOT}/data/\${FOXIUM_USER}/worlds" "worlds"
+foxium_backup_if_exists "\${FOXIUM_ST_ROOT}/data/\${FOXIUM_USER}/characters" "characters"
+foxium_backup_if_exists "\${FOXIUM_ST_ROOT}/data/\${FOXIUM_USER}/OpenAI Settings" "OpenAI_Settings"
+foxium_backup_if_exists "\${FOXIUM_ST_ROOT}/data/\${FOXIUM_USER}/QuickReplies" "QuickReplies"
+foxium_backup_if_exists "\${FOXIUM_ST_ROOT}/data/\${FOXIUM_USER}/settings.json" "settings.json"
+
+foxium_backup_entries="\$(compgen -G "\$FOXIUM_BACKUP_TMP/*")"
+
+if [[ "\$foxium_backup_failed" != "0" || -z "\$foxium_backup_entries" ]]; then
+    echo "[Foxium] Auto backup failed: 复制出错或未找到 data 目录，本次没有生成备份，旧备份保持原样。"
+    rm -rf "\$FOXIUM_BACKUP_TMP"
+else
+    mv "\$FOXIUM_BACKUP_TMP" "\$FOXIUM_BACKUP_DIR"
+    echo "[Foxium] Auto backup completed: \$FOXIUM_BACKUP_DIR (\$(du -sh "\$FOXIUM_BACKUP_DIR" 2>/dev/null | cut -f1))"
+
+    foxium_backup_dirs=()
+    for foxium_dir in "\$FOXIUM_BACKUP_PARENT_DIR"/auto_backup_*; do
+        [[ -d "\$foxium_dir" ]] || continue
+        case "\$foxium_dir" in *.tmp) continue ;; esac
+        foxium_backup_dirs+=("\$foxium_dir")
+    done
+
+    foxium_backup_sorted=()
+    while IFS= read -r foxium_dir; do
+        [[ -n "\$foxium_dir" ]] && foxium_backup_sorted+=("\$foxium_dir")
+    done < <(printf '%s\n' "\${foxium_backup_dirs[@]}" | sort -r)
+
+    foxium_backup_kept=0
+    for foxium_dir in "\${foxium_backup_sorted[@]}"; do
+        foxium_backup_kept=\$((foxium_backup_kept + 1))
+        [[ "\$foxium_backup_kept" -le "\$FOXIUM_BACKUP_KEEP" ]] || rm -rf "\$foxium_dir"
+    done
+fi
 echo
 # === FOXIUM AUTO BACKUP END ===
 
 EOF
 }
+
 write_batch_auto_backup_block() {
     local output_file="$1"
     local batch_user="$2"
 
-    cat >"$output_file"  <<EOF
+    cat > "$output_file" <<EOF
 :: === FOXIUM AUTO BACKUP START ===
 set "FOXIUM_USER=${batch_user}"
 set "FOXIUM_BACKUP_PARENT_DIR=%~dp0foxiumV2\\STbackupF"
 for /f %%A in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMdd_HHmmss"') do set "FOXIUM_BACKUP_TIMESTAMP=%%A"
 set "FOXIUM_BACKUP_DIR=%FOXIUM_BACKUP_PARENT_DIR%\\auto_backup_%FOXIUM_BACKUP_TIMESTAMP%"
+set "FOXIUM_BACKUP_TMP=%FOXIUM_BACKUP_DIR%.tmp"
+set "FOXIUM_BACKUP_KEEP=3"
 
+:: Copy into .tmp first; only rename to a real backup and prune old ones
+:: after the copy succeeded, so a failure never touches previous backups.
 if not exist "%FOXIUM_BACKUP_PARENT_DIR%" mkdir "%FOXIUM_BACKUP_PARENT_DIR%" >nul 2>&1
-for /d %%D in ("%FOXIUM_BACKUP_PARENT_DIR%\\auto_backup_*") do rd /s /q "%%D" 2>nul
-if not exist "%FOXIUM_BACKUP_DIR%" mkdir "%FOXIUM_BACKUP_DIR%" >nul 2>&1
+if exist "%FOXIUM_BACKUP_TMP%" rd /s /q "%FOXIUM_BACKUP_TMP%" 2>nul
+mkdir "%FOXIUM_BACKUP_TMP%" >nul 2>&1
 
+set "FOXIUM_BACKUP_FAILED="
 echo [Foxium] Running auto backup...
-if exist "%~dp0data\\%FOXIUM_USER%\\worlds" xcopy "%~dp0data\\%FOXIUM_USER%\\worlds" "%FOXIUM_BACKUP_DIR%\\worlds\\" /E /Y /I /C /H /R /Q >nul 2>&1
-if exist "%~dp0data\\%FOXIUM_USER%\\characters" xcopy "%~dp0data\\%FOXIUM_USER%\\characters" "%FOXIUM_BACKUP_DIR%\\characters\\" /E /Y /I /C /H /R /Q >nul 2>&1
-if exist "%~dp0data\\%FOXIUM_USER%\\OpenAI Settings" xcopy "%~dp0data\\%FOXIUM_USER%\\OpenAI Settings" "%FOXIUM_BACKUP_DIR%\\OpenAI_Settings\\" /E /Y /I /C /H /R /Q >nul 2>&1
-if exist "%~dp0data\\%FOXIUM_USER%\\QuickReplies" xcopy "%~dp0data\\%FOXIUM_USER%\\QuickReplies" "%FOXIUM_BACKUP_DIR%\\QuickReplies\\" /E /Y /I /C /H /R /Q >nul 2>&1
-if exist "%~dp0data\\%FOXIUM_USER%\\settings.json" copy "%~dp0data\\%FOXIUM_USER%\\settings.json" "%FOXIUM_BACKUP_DIR%\\settings.json" /Y >nul 2>&1
+if exist "%~dp0data\\%FOXIUM_USER%\\worlds" (
+    xcopy "%~dp0data\\%FOXIUM_USER%\\worlds" "%FOXIUM_BACKUP_TMP%\\worlds\\" /E /Y /I /C /H /R /Q >nul 2>&1
+    if errorlevel 1 set "FOXIUM_BACKUP_FAILED=1"
+)
+if exist "%~dp0data\\%FOXIUM_USER%\\characters" (
+    xcopy "%~dp0data\\%FOXIUM_USER%\\characters" "%FOXIUM_BACKUP_TMP%\\characters\\" /E /Y /I /C /H /R /Q >nul 2>&1
+    if errorlevel 1 set "FOXIUM_BACKUP_FAILED=1"
+)
+if exist "%~dp0data\\%FOXIUM_USER%\\OpenAI Settings" (
+    xcopy "%~dp0data\\%FOXIUM_USER%\\OpenAI Settings" "%FOXIUM_BACKUP_TMP%\\OpenAI_Settings\\" /E /Y /I /C /H /R /Q >nul 2>&1
+    if errorlevel 1 set "FOXIUM_BACKUP_FAILED=1"
+)
+if exist "%~dp0data\\%FOXIUM_USER%\\QuickReplies" (
+    xcopy "%~dp0data\\%FOXIUM_USER%\\QuickReplies" "%FOXIUM_BACKUP_TMP%\\QuickReplies\\" /E /Y /I /C /H /R /Q >nul 2>&1
+    if errorlevel 1 set "FOXIUM_BACKUP_FAILED=1"
+)
+if exist "%~dp0data\\%FOXIUM_USER%\\settings.json" (
+    copy "%~dp0data\\%FOXIUM_USER%\\settings.json" "%FOXIUM_BACKUP_TMP%\\settings.json" /Y >nul 2>&1
+    if errorlevel 1 set "FOXIUM_BACKUP_FAILED=1"
+)
+
+for /f %%C in ('dir /b /a "%FOXIUM_BACKUP_TMP%" 2^>nul ^| find /c /v ""') do set "FOXIUM_BACKUP_ITEMS=%%C"
+
+if defined FOXIUM_BACKUP_FAILED goto foxium_backup_failed
+if "%FOXIUM_BACKUP_ITEMS%"=="0" goto foxium_backup_failed
+
+move "%FOXIUM_BACKUP_TMP%" "%FOXIUM_BACKUP_DIR%" >nul
 echo [Foxium] Auto backup completed: %FOXIUM_BACKUP_DIR%
+for /f "skip=%FOXIUM_BACKUP_KEEP% delims=" %%D in ('dir /b /ad /o-n "%FOXIUM_BACKUP_PARENT_DIR%\\auto_backup_*" 2^>nul') do rd /s /q "%FOXIUM_BACKUP_PARENT_DIR%\\%%D" 2>nul
+goto foxium_backup_done
+
+:foxium_backup_failed
+echo [Foxium] Auto backup failed: copy error or data directory not found; previous backups are kept.
+rd /s /q "%FOXIUM_BACKUP_TMP%" 2>nul
+
+:foxium_backup_done
 echo.
 :: === FOXIUM AUTO BACKUP END ===
 
 EOF
 }
+
 insert_auto_backup_block() {
     local target_file="$1"
     local block_file="$2"
@@ -1844,7 +2003,7 @@ insert_auto_backup_block() {
         }
         { print }
         END { exit inserted ? 0 : 1 }
-    ' "$block_file" "$target_file" >"$temp_file"; then
+    ' "$block_file" "$target_file" > "$temp_file"; then
         mv "$temp_file" "$target_file"
         return 0
     fi
@@ -1852,10 +2011,11 @@ insert_auto_backup_block() {
     rm -f "$temp_file"
     return 1
 }
+
 enable_auto_backup() {
     print_title "启用自动备份"
     print_info "此功能会把自动备份代码注入到 start.sh 或 Windows 启动脚本中。"
-    print_info "自动备份会在每次启动前保留最新一份 worlds / characters / OpenAI Settings / QuickReplies / settings.json。"
+    print_info "自动备份会在每次启动前备份 worlds / characters / OpenAI Settings / QuickReplies / settings.json，并保留最近 3 份。"
 
     printf '%s\n' "1. Termux / Linux (修改 start.sh)"
     printf '%s\n' "2. Windows (修改 Start.bat 或 start.bat)"
@@ -1874,7 +2034,7 @@ enable_auto_backup() {
                     print_error "未找到 Windows 启动脚本。"
                     press_enter_to_continue
                     return
-            fi
+                fi
                 break
                 ;;
             0)
@@ -1937,9 +2097,9 @@ enable_auto_backup() {
     press_enter_to_continue
 }
 
-
 ################################################################################
 #  End File:  foxiumV2/./lib/auto_backup.sh
+#  Bundle Date: 2026-09-16 21:06:59
 ################################################################################
 
 
@@ -1960,6 +2120,7 @@ show_main_menu() {
     printf '%s\n' "0. 退出"
     printf '\n'
 }
+
 show_fix_menu() {
     clear_screen
     print_title "修复功能"
@@ -1971,6 +2132,7 @@ show_fix_menu() {
     printf '%s\n' "0. 返回主菜单"
     printf '\n'
 }
+
 show_editor_menu() {
     clear_screen
     print_title "编辑器"
@@ -1981,6 +2143,7 @@ show_editor_menu() {
     printf '%s\n' "0. 返回主菜单"
     printf '\n'
 }
+
 show_optimize_menu() {
     clear_screen
     print_title "优化功能"
@@ -1990,6 +2153,7 @@ show_optimize_menu() {
     printf '%s\n' "0. 返回主菜单"
     printf '\n'
 }
+
 fix_menu_loop() {
     while true; do
         show_fix_menu
@@ -2008,6 +2172,7 @@ fix_menu_loop() {
         esac
     done
 }
+
 show_model_editor_deprecated() {
     print_title "功能已弃用"
     print_warn "Claude/Gemini 模型列表修改器已弃用。"
@@ -2017,6 +2182,7 @@ show_model_editor_deprecated() {
     printf '\n'
     press_enter_to_continue
 }
+
 editor_menu_loop() {
     while true; do
         show_editor_menu
@@ -2034,6 +2200,7 @@ editor_menu_loop() {
         esac
     done
 }
+
 optimize_menu_loop() {
     while true; do
         show_optimize_menu
@@ -2050,6 +2217,7 @@ optimize_menu_loop() {
         esac
     done
 }
+
 main_loop() {
     while true; do
         show_main_menu
@@ -2070,14 +2238,26 @@ main_loop() {
         esac
     done
 }
+
+handle_interrupt() {
+    printf '\n'
+    print_warn "已中断。"
+    if [[ -n "$BACKUP_SESSION_DIR" ]]; then
+        print_info "本次备份目录: $BACKUP_SESSION_DIR"
+    fi
+    print_info "重新运行脚本即可继续。"
+    exit 130
+}
+
 main() {
+    trap handle_interrupt INT
     run_startup_checks
     main_loop
 }
+
 main
-
-
 ################################################################################
 #  End File:  ./foxiumV2/main.sh
+#  Bundle Date: 2026-09-16 21:06:59
 ################################################################################
 

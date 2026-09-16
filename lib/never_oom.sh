@@ -81,6 +81,23 @@ never_oom() {
     print_info "此功能会尝试完成两步："
     printf '%s\n' "1. 对旧版本 ST 的 users.js 和 characters.js 加入 expiredInterval: 0"
     printf '%s\n' "2. 为启动脚本增加 --max-old-space-size=4096"
+    printf '\n'
+
+    local total_memory node_arch
+    if total_memory="$(read_total_memory_gb)"; then
+        print_info "设备总内存: ${total_memory} GB"
+    else
+        print_info "设备总内存: 未知"
+    fi
+
+    if node_arch="$(read_node_arch)"; then
+        print_info "node 架构: ${node_arch}"
+        if [[ "$node_arch" == "arm" ]]; then
+            print_warn "当前是 32 位 node：它实际到不了 4096 的堆上限，本次修复很可能不生效，建议换用 64 位 node。"
+        fi
+    else
+        print_info "node 架构: 未知"
+    fi
 
     if ! ask_confirm "确认执行该修复吗？" "n"; then
         print_info "操作已取消。"
@@ -135,5 +152,19 @@ never_oom() {
     done
 
     print_success "Never OOM 修复流程已结束。"
+    printf '\n'
+    print_title "如果之后还是爆内存"
+    print_info "崩溃时终端会打印一行「<脚本>: line N: PID 信号 <命令>」，照着分四种情况："
+    printf '%s\n' "1. 那行里没有 --max-old-space-size=4096：这次崩溃的进程没吃到参数，"
+    printf '%s\n' "   要么修改没成功，要么酒馆不是用被改过的启动脚本拉起来的。"
+    printf '%s\n' "2. 那行的信号是 Killed（不是 Aborted）：进程是被系统杀掉的，和堆上限无关，"
+    printf '%s\n' "   继续调大数字没有用，先减少同时运行的程序、缩短上下文。"
+    printf '%s\n' "3. 那行带着 4096，但崩溃前最后几行的内存数字只到 1G 上下：这个进程实际没拿到 4G，"
+    printf '%s\n' "   先确认 node 不是 32 位（本功能开头显示的架构是 arm 就是），"
+    printf '%s\n' "   再确认设备可用内存是不是被其他程序占满了。"
+    printf '%s\n' "4. 崩溃前最后几行的内存数字确实冲到 4096 附近：说明你的酒馆真的吃了 4G 内存，"
+    printf '%s\n' "   这是不正常的，先排查可疑的角色卡 / 聊天记录 / 插件。"
+    printf '\n'
+    print_info "排查不出来时，把本功能开头显示的环境信息和崩溃时那几行一起发出来。"
     press_enter_to_continue
 }

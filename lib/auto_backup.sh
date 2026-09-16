@@ -7,33 +7,66 @@ write_shell_auto_backup_block() {
     cat > "$output_file" <<EOF
 # === FOXIUM AUTO BACKUP START ===
 FOXIUM_USER="${escaped_user}"
-FOXIUM_BACKUP_PARENT_DIR="\$(cd "\$(dirname "\$0")" && pwd)/foxiumV2/STbackupF"
+FOXIUM_ST_ROOT="\$(cd "\$(dirname "\$0")" && pwd)"
+FOXIUM_BACKUP_PARENT_DIR="\${FOXIUM_ST_ROOT}/foxiumV2/STbackupF"
 FOXIUM_BACKUP_TIMESTAMP="\$(date +"%Y%m%d_%H%M%S")"
 FOXIUM_BACKUP_DIR="\${FOXIUM_BACKUP_PARENT_DIR}/auto_backup_\${FOXIUM_BACKUP_TIMESTAMP}"
+FOXIUM_BACKUP_TMP="\${FOXIUM_BACKUP_DIR}.tmp"
+FOXIUM_BACKUP_KEEP=3
 
+# 先复制到 .tmp，确认复制成功后才改名为正式备份并清理旧备份，
+# 任何失败都不会影响上一次的备份。
 mkdir -p "\$FOXIUM_BACKUP_PARENT_DIR"
-for foxium_existing_dir in "\$FOXIUM_BACKUP_PARENT_DIR"/auto_backup_*; do
-    [[ -e "\$foxium_existing_dir" ]] || continue
-    rm -rf "\$foxium_existing_dir"
-done
+rm -rf "\$FOXIUM_BACKUP_TMP"
+mkdir -p "\$FOXIUM_BACKUP_TMP"
 
-mkdir -p "\$FOXIUM_BACKUP_DIR"
+foxium_backup_failed=0
 
 foxium_backup_if_exists() {
     local input_path="\$1"
     local destination_name="\$2"
     if [[ -e "\$input_path" ]]; then
-        cp -R "\$input_path" "\$FOXIUM_BACKUP_DIR/\$destination_name" >/dev/null 2>&1
+        if ! cp -R "\$input_path" "\$FOXIUM_BACKUP_TMP/\$destination_name"; then
+            echo "[Foxium] 备份失败: \$input_path"
+            foxium_backup_failed=1
+        fi
     fi
 }
 
 echo "[Foxium] Running auto backup..."
-foxium_backup_if_exists "data/\${FOXIUM_USER}/worlds" "worlds"
-foxium_backup_if_exists "data/\${FOXIUM_USER}/characters" "characters"
-foxium_backup_if_exists "data/\${FOXIUM_USER}/OpenAI Settings" "OpenAI_Settings"
-foxium_backup_if_exists "data/\${FOXIUM_USER}/QuickReplies" "QuickReplies"
-foxium_backup_if_exists "data/\${FOXIUM_USER}/settings.json" "settings.json"
-echo "[Foxium] Auto backup completed: \${FOXIUM_BACKUP_DIR}"
+foxium_backup_if_exists "\${FOXIUM_ST_ROOT}/data/\${FOXIUM_USER}/worlds" "worlds"
+foxium_backup_if_exists "\${FOXIUM_ST_ROOT}/data/\${FOXIUM_USER}/characters" "characters"
+foxium_backup_if_exists "\${FOXIUM_ST_ROOT}/data/\${FOXIUM_USER}/OpenAI Settings" "OpenAI_Settings"
+foxium_backup_if_exists "\${FOXIUM_ST_ROOT}/data/\${FOXIUM_USER}/QuickReplies" "QuickReplies"
+foxium_backup_if_exists "\${FOXIUM_ST_ROOT}/data/\${FOXIUM_USER}/settings.json" "settings.json"
+
+foxium_backup_entries="\$(compgen -G "\$FOXIUM_BACKUP_TMP/*")"
+
+if [[ "\$foxium_backup_failed" != "0" || -z "\$foxium_backup_entries" ]]; then
+    echo "[Foxium] Auto backup failed: 复制出错或未找到 data 目录，本次没有生成备份，旧备份保持原样。"
+    rm -rf "\$FOXIUM_BACKUP_TMP"
+else
+    mv "\$FOXIUM_BACKUP_TMP" "\$FOXIUM_BACKUP_DIR"
+    echo "[Foxium] Auto backup completed: \$FOXIUM_BACKUP_DIR (\$(du -sh "\$FOXIUM_BACKUP_DIR" 2>/dev/null | cut -f1))"
+
+    foxium_backup_dirs=()
+    for foxium_dir in "\$FOXIUM_BACKUP_PARENT_DIR"/auto_backup_*; do
+        [[ -d "\$foxium_dir" ]] || continue
+        case "\$foxium_dir" in *.tmp) continue ;; esac
+        foxium_backup_dirs+=("\$foxium_dir")
+    done
+
+    foxium_backup_sorted=()
+    while IFS= read -r foxium_dir; do
+        [[ -n "\$foxium_dir" ]] && foxium_backup_sorted+=("\$foxium_dir")
+    done < <(printf '%s\n' "\${foxium_backup_dirs[@]}" | sort -r)
+
+    foxium_backup_kept=0
+    for foxium_dir in "\${foxium_backup_sorted[@]}"; do
+        foxium_backup_kept=\$((foxium_backup_kept + 1))
+        [[ "\$foxium_backup_kept" -le "\$FOXIUM_BACKUP_KEEP" ]] || rm -rf "\$foxium_dir"
+    done
+fi
 echo
 # === FOXIUM AUTO BACKUP END ===
 
@@ -50,18 +83,53 @@ set "FOXIUM_USER=${batch_user}"
 set "FOXIUM_BACKUP_PARENT_DIR=%~dp0foxiumV2\\STbackupF"
 for /f %%A in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMdd_HHmmss"') do set "FOXIUM_BACKUP_TIMESTAMP=%%A"
 set "FOXIUM_BACKUP_DIR=%FOXIUM_BACKUP_PARENT_DIR%\\auto_backup_%FOXIUM_BACKUP_TIMESTAMP%"
+set "FOXIUM_BACKUP_TMP=%FOXIUM_BACKUP_DIR%.tmp"
+set "FOXIUM_BACKUP_KEEP=3"
 
+:: Copy into .tmp first; only rename to a real backup and prune old ones
+:: after the copy succeeded, so a failure never touches previous backups.
 if not exist "%FOXIUM_BACKUP_PARENT_DIR%" mkdir "%FOXIUM_BACKUP_PARENT_DIR%" >nul 2>&1
-for /d %%D in ("%FOXIUM_BACKUP_PARENT_DIR%\\auto_backup_*") do rd /s /q "%%D" 2>nul
-if not exist "%FOXIUM_BACKUP_DIR%" mkdir "%FOXIUM_BACKUP_DIR%" >nul 2>&1
+if exist "%FOXIUM_BACKUP_TMP%" rd /s /q "%FOXIUM_BACKUP_TMP%" 2>nul
+mkdir "%FOXIUM_BACKUP_TMP%" >nul 2>&1
 
+set "FOXIUM_BACKUP_FAILED="
 echo [Foxium] Running auto backup...
-if exist "%~dp0data\\%FOXIUM_USER%\\worlds" xcopy "%~dp0data\\%FOXIUM_USER%\\worlds" "%FOXIUM_BACKUP_DIR%\\worlds\\" /E /Y /I /C /H /R /Q >nul 2>&1
-if exist "%~dp0data\\%FOXIUM_USER%\\characters" xcopy "%~dp0data\\%FOXIUM_USER%\\characters" "%FOXIUM_BACKUP_DIR%\\characters\\" /E /Y /I /C /H /R /Q >nul 2>&1
-if exist "%~dp0data\\%FOXIUM_USER%\\OpenAI Settings" xcopy "%~dp0data\\%FOXIUM_USER%\\OpenAI Settings" "%FOXIUM_BACKUP_DIR%\\OpenAI_Settings\\" /E /Y /I /C /H /R /Q >nul 2>&1
-if exist "%~dp0data\\%FOXIUM_USER%\\QuickReplies" xcopy "%~dp0data\\%FOXIUM_USER%\\QuickReplies" "%FOXIUM_BACKUP_DIR%\\QuickReplies\\" /E /Y /I /C /H /R /Q >nul 2>&1
-if exist "%~dp0data\\%FOXIUM_USER%\\settings.json" copy "%~dp0data\\%FOXIUM_USER%\\settings.json" "%FOXIUM_BACKUP_DIR%\\settings.json" /Y >nul 2>&1
+if exist "%~dp0data\\%FOXIUM_USER%\\worlds" (
+    xcopy "%~dp0data\\%FOXIUM_USER%\\worlds" "%FOXIUM_BACKUP_TMP%\\worlds\\" /E /Y /I /C /H /R /Q >nul 2>&1
+    if errorlevel 1 set "FOXIUM_BACKUP_FAILED=1"
+)
+if exist "%~dp0data\\%FOXIUM_USER%\\characters" (
+    xcopy "%~dp0data\\%FOXIUM_USER%\\characters" "%FOXIUM_BACKUP_TMP%\\characters\\" /E /Y /I /C /H /R /Q >nul 2>&1
+    if errorlevel 1 set "FOXIUM_BACKUP_FAILED=1"
+)
+if exist "%~dp0data\\%FOXIUM_USER%\\OpenAI Settings" (
+    xcopy "%~dp0data\\%FOXIUM_USER%\\OpenAI Settings" "%FOXIUM_BACKUP_TMP%\\OpenAI_Settings\\" /E /Y /I /C /H /R /Q >nul 2>&1
+    if errorlevel 1 set "FOXIUM_BACKUP_FAILED=1"
+)
+if exist "%~dp0data\\%FOXIUM_USER%\\QuickReplies" (
+    xcopy "%~dp0data\\%FOXIUM_USER%\\QuickReplies" "%FOXIUM_BACKUP_TMP%\\QuickReplies\\" /E /Y /I /C /H /R /Q >nul 2>&1
+    if errorlevel 1 set "FOXIUM_BACKUP_FAILED=1"
+)
+if exist "%~dp0data\\%FOXIUM_USER%\\settings.json" (
+    copy "%~dp0data\\%FOXIUM_USER%\\settings.json" "%FOXIUM_BACKUP_TMP%\\settings.json" /Y >nul 2>&1
+    if errorlevel 1 set "FOXIUM_BACKUP_FAILED=1"
+)
+
+for /f %%C in ('dir /b /a "%FOXIUM_BACKUP_TMP%" 2^>nul ^| find /c /v ""') do set "FOXIUM_BACKUP_ITEMS=%%C"
+
+if defined FOXIUM_BACKUP_FAILED goto foxium_backup_failed
+if "%FOXIUM_BACKUP_ITEMS%"=="0" goto foxium_backup_failed
+
+move "%FOXIUM_BACKUP_TMP%" "%FOXIUM_BACKUP_DIR%" >nul
 echo [Foxium] Auto backup completed: %FOXIUM_BACKUP_DIR%
+for /f "skip=%FOXIUM_BACKUP_KEEP% delims=" %%D in ('dir /b /ad /o-n "%FOXIUM_BACKUP_PARENT_DIR%\\auto_backup_*" 2^>nul') do rd /s /q "%FOXIUM_BACKUP_PARENT_DIR%\\%%D" 2>nul
+goto foxium_backup_done
+
+:foxium_backup_failed
+echo [Foxium] Auto backup failed: copy error or data directory not found; previous backups are kept.
+rd /s /q "%FOXIUM_BACKUP_TMP%" 2>nul
+
+:foxium_backup_done
 echo.
 :: === FOXIUM AUTO BACKUP END ===
 
@@ -93,7 +161,7 @@ insert_auto_backup_block() {
 enable_auto_backup() {
     print_title "启用自动备份"
     print_info "此功能会把自动备份代码注入到 start.sh 或 Windows 启动脚本中。"
-    print_info "自动备份会在每次启动前保留最新一份 worlds / characters / OpenAI Settings / QuickReplies / settings.json。"
+    print_info "自动备份会在每次启动前备份 worlds / characters / OpenAI Settings / QuickReplies / settings.json，并保留最近 3 份。"
 
     printf '%s\n' "1. Termux / Linux (修改 start.sh)"
     printf '%s\n' "2. Windows (修改 Start.bat 或 start.bat)"

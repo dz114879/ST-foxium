@@ -168,7 +168,18 @@ main_loop() {
     done
 }
 
+handle_interrupt() {
+    printf '\n'
+    print_warn "已中断。"
+    if [[ -n "$BACKUP_SESSION_DIR" ]]; then
+        print_info "本次备份目录: $BACKUP_SESSION_DIR"
+    fi
+    print_info "重新运行脚本即可继续。"
+    exit 130
+}
+
 main() {
+    trap handle_interrupt INT
     run_startup_checks
     main_loop
 }
