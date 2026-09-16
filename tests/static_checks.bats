@@ -4,10 +4,11 @@ setup() {
     load test_helper
 }
 
-# The release artifact is a hand-regenerated bundle with no generator in the
-# repo, so the only guard against shipping stale code to users is this check.
-# The bundle goes through a shfmt-like pass, so whitespace is stripped from both
-# sides before comparing; any real edit still shows up as a mismatch.
+# build/bundle.sh generates build/ffss.sh from main.sh and lib/, but nothing
+# forces a contributor to rerun it. Since the README installs the bundle
+# directly, this check is the guard against shipping stale code to users.
+# Whitespace is stripped from both sides before comparing so formatting
+# differences in the bundle do not matter; any real edit still shows up.
 @test "build/ffss.sh contains every lib file verbatim (whitespace-insensitive)" {
     local bundle
     bundle="$(tr -d '[:space:]' < "${REPO_ROOT}/build/ffss.sh")"
