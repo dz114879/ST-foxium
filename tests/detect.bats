@@ -206,3 +206,19 @@ setup() {
     [ "$status" -ne 0 ]
     [ -z "$ST_DIR" ]
 }
+
+@test "validate_user_name accepts ST handles and rejects shell metacharacters" {
+    run validate_user_name "default-user"
+    [ "$status" -eq 0 ]
+
+    run validate_user_name "user_1.2"
+    [ "$status" -eq 0 ]
+
+    # The name reaches an unquoted heredoc when the auto-backup block is
+    # generated, so command substitution and path traversal must be rejected.
+    local bad
+    for bad in '`id`' '$(id)' 'a;b' 'a|b' 'a&b' 'a b' 'a/b' 'a\b' '../x' $'a\nb'; do
+        run validate_user_name "$bad"
+        [ "$status" -ne 0 ]
+    done
+}

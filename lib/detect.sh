@@ -308,7 +308,10 @@ validate_user_name() {
         return 1
     fi
 
-    if [[ "$value" == *['\/:*?"<>|%!']* ]]; then
+    # 白名单而非黑名单：用户名会被拼进未加引号的 heredoc（生成 start.sh 自动
+    # 备份块时做参数展开/命令替换）和 Windows 批处理，也会被拼成路径。只放行
+    # ST handle 实际使用的字符集，避免遗漏某个元字符就重新打开注入点。
+    if [[ ! "$value" =~ ^[A-Za-z0-9._-]+$ ]]; then
         return 1
     fi
 
@@ -332,7 +335,7 @@ set_user_directory() {
             break
         fi
 
-        print_warn "用户名不能包含路径分隔符或 Windows 非法文件名字符。"
+        print_warn "用户名只能包含字母、数字、点、下划线和连字符。"
     done
 
     USER_DIR="${ST_DIR}/data/${USER_NAME}"
