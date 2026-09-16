@@ -19,6 +19,8 @@ BACKUP_SESSION_DIR="${BACKUP_SESSION_DIR:-}"
 JQ_AVAILABLE="${JQ_AVAILABLE:-0}"
 YQ_AVAILABLE="${YQ_AVAILABLE:-0}"
 YQ_FLAVOR="${YQ_FLAVOR:-}"
+# 由 main.sh 解析命令行参数时置为 1（当前只有 --fix-oom），脚本运行期间不再改动。
+FOXIUM_NONINTERACTIVE="0"
 
 command_exists() {
     command -v "$1" >/dev/null 2>&1
@@ -82,7 +84,16 @@ exit_on_stdin_eof() {
     exit 1
 }
 
+# 自动模式（--fix-oom）：无人值守，确认一律按 y、不等待按键。
+is_noninteractive_mode() {
+    [[ "$FOXIUM_NONINTERACTIVE" == "1" ]]
+}
+
 press_enter_to_continue() {
+    if is_noninteractive_mode; then
+        return 0
+    fi
+
     printf '%b' "${YELLOW}按回车键继续...${NC}"
     read -r _ || exit_on_stdin_eof
 }
@@ -101,6 +112,11 @@ ask_confirm() {
     local default="${2:-n}"
     local suffix=""
     local response=""
+
+    if is_noninteractive_mode; then
+        printf '%b\n' "${YELLOW}${prompt}${NC} ${DIM}[非交互模式：自动按 y]${NC}"
+        return 0
+    fi
 
     case "${default,,}" in
         y) suffix=" [Y/n]: " ;;
@@ -389,6 +405,12 @@ choose_windows_start_script() {
     if [[ ${#candidates[@]} -eq 1 ]]; then
         printf -v "$__resultvar" '%s' "${candidates[0]}"
         return 0
+    fi
+
+    if is_noninteractive_mode; then
+        print_error "检测到多个 Windows 启动脚本，非交互模式无法选择："
+        printf '  %s\n' "${candidates[@]}"
+        return 1
     fi
 
     print_info "检测到多个 Windows 启动脚本："

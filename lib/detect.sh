@@ -254,8 +254,20 @@ prompt_for_st_directory() {
 select_st_directory() {
     collect_st_candidates
 
+    # 自动模式下不做编号选择：猜错会改到另一个酒馆，宁可让用户手动跑一次。
+    if is_noninteractive_mode && [[ ${#ST_CANDIDATES[@]} -gt 1 ]]; then
+        print_error "检测到多个 SillyTavern 目录，非交互模式无法自动选择："
+        printf '  %s\n' "${ST_CANDIDATES[@]}"
+        print_info "请去掉 --fix-oom 手动运行一次，选择要修复的目录。"
+        return 1
+    fi
+
     if [[ ${#ST_CANDIDATES[@]} -gt 0 ]]; then
         prompt_candidate_selection && return 0
+    elif is_noninteractive_mode; then
+        print_error "未自动找到 SillyTavern 目录，非交互模式无法手动输入路径。"
+        print_info "请在酒馆目录或它的上级目录里运行，或去掉 --fix-oom 手动指定目录。"
+        return 1
     else
         print_warn "未自动找到 SillyTavern 目录。"
     fi
@@ -499,6 +511,11 @@ detect_optional_tool() {
 
     print_warn "未检测到 ${tool_name}"
 
+    # 非交互模式不代为安装：装包属于本次修复之外的副作用，留给用户自己决定。
+    if is_noninteractive_mode; then
+        return 1
+    fi
+
     if is_termux_environment; then
         if ask_confirm "是否尝试自动安装 ${tool_name}？" "y"; then
             if pkg install -y "$tool_name"; then
@@ -555,7 +572,11 @@ run_startup_checks() {
         exit 1
     fi
 
-    if ! set_user_directory; then
+    # 非交互模式不询问用户名：本次自动修复用不到用户目录，
+    # 也不会为了「看起来正常」去创建一个并不存在的用户目录。
+    if is_noninteractive_mode; then
+        print_info "非交互模式：跳过用户名检查。"
+    elif ! set_user_directory; then
         exit 1
     fi
 
@@ -563,7 +584,9 @@ run_startup_checks() {
 
     print_success "启动检查完成。"
     print_info "ST 目录: $ST_DIR"
-    print_info "用户目录: $USER_DIR"
+    if [[ -n "$USER_DIR" ]]; then
+        print_info "用户目录: $USER_DIR"
+    fi
     print_info "本次备份目录: $BACKUP_SESSION_DIR"
     print_info "jq: $([[ "$JQ_AVAILABLE" == "1" ]] && printf '%s' '可用' || printf '%s' '不可用')"
     print_info "yq: $([[ "$YQ_AVAILABLE" == "1" ]] && printf '%s' '可用' || printf '%s' '不可用')"

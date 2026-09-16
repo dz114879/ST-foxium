@@ -172,3 +172,37 @@ setup() {
     [ "$status" -ne 0 ]
     [ -z "$ST_DIR" ]
 }
+
+@test "select_st_directory takes the only candidate in non-interactive mode without asking" {
+    make_st_root "${FOXIUM_ROOT}/SillyTavern"
+    FOXIUM_NONINTERACTIVE=1
+    ST_DIR=""
+
+    select_st_directory < /dev/null > /dev/null
+
+    [ "$ST_DIR" = "$(canonical_path "${FOXIUM_ROOT}/SillyTavern")" ]
+}
+
+@test "select_st_directory fails fast on several candidates in non-interactive mode" {
+    make_st_root "${FOXIUM_ROOT}/SillyTavern"
+    make_st_root "${FOXIUM_ROOT}/SillyTavern-2"
+    FOXIUM_NONINTERACTIVE=1
+    ST_DIR=""
+    local status=0
+
+    select_st_directory < /dev/null > /dev/null || status=$?
+
+    [ "$status" -ne 0 ]
+    [ -z "$ST_DIR" ]
+}
+
+@test "select_st_directory fails fast when nothing is found in non-interactive mode" {
+    FOXIUM_NONINTERACTIVE=1
+    ST_DIR=""
+    local status=0
+
+    select_st_directory < /dev/null > /dev/null || status=$?
+
+    [ "$status" -ne 0 ]
+    [ -z "$ST_DIR" ]
+}

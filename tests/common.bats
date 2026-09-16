@@ -82,6 +82,16 @@ setup() {
     [ "$status" -ne 0 ]
 }
 
+@test "non-interactive mode answers confirmations and waits for nothing" {
+    FOXIUM_NONINTERACTIVE=1
+
+    run ask_confirm "continue?" < /dev/null
+    [ "$status" -eq 0 ]
+
+    run press_enter_to_continue < /dev/null
+    [ "$status" -eq 0 ]
+}
+
 @test "insert_line_after_anchor inserts once, after the first matching anchor" {
     local file="${BATS_TEST_TMPDIR}/users.js"
     printf 'const a = 1;\nttl: false, // Never expire\nconst b = 2;\nttl: false, // Never expire\n' > "$file"

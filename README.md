@@ -40,6 +40,18 @@ curl -fL --retry 3 --connect-timeout 15 "https://raw.githubusercontent.com/dz114
 
 想先看看脚本内容再运行：把命令末尾的 `&& bash ffss.sh` 去掉，用 `less ffss.sh` 查看，确认后再 `bash ffss.sh`。
 
+### 只跑爆内存修复（--fix-oom）
+
+只想执行「二合一爆内存修复」、不想进菜单时，加 `--fix-oom`：
+
+```bash
+bash ffss.sh --fix-oom
+```
+
+所有确认自动按 y 处理，中途不需要任何输入；无法自动决定的选择（同时存在多个 SillyTavern 目录，或 Windows 下有多个启动脚本）会直接报错退出，不会替你猜。修改前依旧会备份到本次的 `STbackupF/<时间戳_随机后缀>/`，有任何一步没成功时退出码非 0。
+
+非交互模式不询问酒馆用户名（该修复用不到），也不会主动安装 `jq` / `yq`。完整参数见 `bash ffss.sh --help`。
+
 ---
 
 ## 运行说明

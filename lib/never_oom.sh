@@ -99,11 +99,16 @@ never_oom() {
         print_info "node 架构: 未知"
     fi
 
-    if ! ask_confirm "确认执行该修复吗？" "n"; then
+    if is_noninteractive_mode; then
+        print_info "非交互模式（--fix-oom）：本次修复自动确认执行。"
+    elif ! ask_confirm "确认执行该修复吗？" "n"; then
         print_info "操作已取消。"
         press_enter_to_continue
         return
     fi
+
+    # 非交互模式下退出码是唯一的失败信号，任何一步没做成都要如实返回。
+    local failed=0
 
     print_title "[1/2] 修复旧版本缓存过期扫描"
     local should_patch_storage="1"
@@ -115,43 +120,59 @@ never_oom() {
     fi
 
     if [[ "$should_patch_storage" == "1" ]]; then
-        patch_expired_interval_setting "${ST_DIR}/src/users.js" "ttl: false, // Never expire" "        expiredInterval: 0,"
-        patch_expired_interval_setting "${ST_DIR}/src/endpoints/characters.js" "forgiveParseErrors: true," "            expiredInterval: 0,"
+        patch_expired_interval_setting "${ST_DIR}/src/users.js" "ttl: false, // Never expire" "        expiredInterval: 0," || failed=1
+        patch_expired_interval_setting "${ST_DIR}/src/endpoints/characters.js" "forgiveParseErrors: true," "            expiredInterval: 0," || failed=1
     fi
 
     print_title "[2/2] 提高启动脚本内存上限"
-    printf '%s\n' "1. Termux / Linux (修改 start.sh)"
-    printf '%s\n' "2. Windows (修改 Start.bat 或 start.bat)"
-    printf '%s\n' "0. 跳过此步骤"
 
     local env_choice start_file
-    while true; do
-        prompt_choice "请选择 [0-2]: " env_choice
-        case "$env_choice" in
-            1)
-                start_file="${ST_DIR}/start.sh"
-                update_start_script_memory_limit "$start_file" 4096
-                break
-                ;;
-            2)
-                if ! choose_windows_start_script start_file; then
-                    print_error "未找到可用的 Windows 启动脚本。"
-                else
-                    update_start_script_memory_limit "$start_file" 4096
-                fi
-                break
-                ;;
-            0)
-                print_info "已跳过启动脚本内存限制修改。"
-                break
-                ;;
-            *)
-                print_warn "无效的选项。"
-                ;;
-        esac
-    done
+    if is_noninteractive_mode; then
+        # 自动模式按当前平台推断酒馆是用哪个脚本拉起来的，选错等于白改。
+        if is_windows_git_bash_environment; then
+            env_choice="2"
+            print_info "非交互模式：检测到 Windows Git Bash，自动选择 Windows 启动脚本。"
+        else
+            env_choice="1"
+            print_info "非交互模式：自动选择 start.sh。"
+        fi
+    else
+        printf '%s\n' "1. Termux / Linux (修改 start.sh)"
+        printf '%s\n' "2. Windows (修改 Start.bat 或 start.bat)"
+        printf '%s\n' "0. 跳过此步骤"
 
-    print_success "Never OOM 修复流程已结束。"
+        while true; do
+            prompt_choice "请选择 [0-2]: " env_choice
+            case "$env_choice" in
+                0|1|2) break ;;
+                *) print_warn "无效的选项。" ;;
+            esac
+        done
+    fi
+
+    case "$env_choice" in
+        1)
+            start_file="${ST_DIR}/start.sh"
+            update_start_script_memory_limit "$start_file" 4096 || failed=1
+            ;;
+        2)
+            if choose_windows_start_script start_file; then
+                update_start_script_memory_limit "$start_file" 4096 || failed=1
+            else
+                print_error "未找到可用的 Windows 启动脚本。"
+                failed=1
+            fi
+            ;;
+        0)
+            print_info "已跳过启动脚本内存限制修改。"
+            ;;
+    esac
+
+    if (( failed )); then
+        print_warn "Never OOM 修复流程已结束，但有步骤未成功（见上方提示）。"
+    else
+        print_success "Never OOM 修复流程已结束。"
+    fi
     printf '\n'
     print_title "如果之后还是爆内存"
     print_info "崩溃时终端会打印一行「<脚本>: line N: PID 信号 <命令>」，照着分四种情况："
@@ -167,4 +188,6 @@ never_oom() {
     printf '\n'
     print_info "排查不出来时，把本功能开头显示的环境信息和崩溃时那几行一起发出来。"
     press_enter_to_continue
+
+    return "$failed"
 }

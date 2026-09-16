@@ -95,3 +95,34 @@ setup() {
     run patch_expired_interval_setting "${ST_DIR}/nope.js" "anchor" "line"
     [ "$status" -ne 0 ]
 }
+
+# The platform is pinned so the automatic start script choice is the Unix one
+# wherever the suite runs.
+pin_unix_platform() {
+    OSTYPE="linux-gnu"
+    MSYSTEM=""
+}
+
+@test "never_oom runs unattended in non-interactive mode and patches both targets" {
+    pin_unix_platform
+    FOXIUM_NONINTERACTIVE=1
+    mkdir -p "${ST_DIR}/src/endpoints"
+    printf 'const user = {\n    ttl: false, // Never expire\n};\n' > "${ST_DIR}/src/users.js"
+    printf 'const characters = {\n    forgiveParseErrors: true,\n};\n' > "${ST_DIR}/src/endpoints/characters.js"
+
+    run never_oom < /dev/null
+
+    [ "$status" -eq 0 ]
+    grep -Fq 'expiredInterval: 0,' "${ST_DIR}/src/users.js"
+    grep -Fq 'expiredInterval: 0,' "${ST_DIR}/src/endpoints/characters.js"
+    grep -Fq -- '--max-old-space-size=4096' "${ST_DIR}/start.sh"
+}
+
+@test "never_oom reports failure through its exit status in non-interactive mode" {
+    pin_unix_platform
+    FOXIUM_NONINTERACTIVE=1
+    # the fixture has no src/ files, so the storage patch step cannot succeed
+    run never_oom < /dev/null
+
+    [ "$status" -ne 0 ]
+}

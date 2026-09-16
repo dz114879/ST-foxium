@@ -171,6 +171,34 @@ main_loop() {
     done
 }
 
+show_usage() {
+    printf '%s\n' "用法: bash ffss.sh [选项]"
+    printf '%s\n' "  --fix-oom   非交互执行「二合一爆内存修复」，所有确认自动按 y 处理"
+    printf '%s\n' "  -h, --help  显示本帮助"
+    printf '%s\n' "不带选项时进入交互菜单。"
+}
+
+parse_cli_args() {
+    local arg
+
+    for arg in "$@"; do
+        case "$arg" in
+            --fix-oom)
+                FOXIUM_NONINTERACTIVE="1"
+                ;;
+            -h|--help)
+                show_usage
+                exit 0
+                ;;
+            *)
+                print_error "未知的参数: $arg"
+                show_usage
+                return 1
+                ;;
+        esac
+    done
+}
+
 handle_interrupt() {
     printf '\n'
     print_warn "已中断。"
@@ -183,8 +211,24 @@ handle_interrupt() {
 
 main() {
     trap handle_interrupt INT
+
+    if ! parse_cli_args "$@"; then
+        exit 1
+    fi
+
+    if is_noninteractive_mode; then
+        print_title "--fix-oom 非交互模式"
+        print_info "所有确认自动按 y 处理；遇到无法自动决定的选择会直接报错退出。"
+    fi
+
     run_startup_checks
+
+    if is_noninteractive_mode; then
+        never_oom
+        exit $?
+    fi
+
     main_loop
 }
 
-main
+main "$@"

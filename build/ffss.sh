@@ -2,7 +2,7 @@
 
 ################################################################################
 #  File:  ./foxiumV2/main.sh
-#  Bundle Date: 2026-09-16 22:37:59
+#  Bundle Date: 2026-09-16 22:44:56
 ################################################################################
 
 
@@ -21,7 +21,7 @@ cd "$FOXIUM_ROOT" || exit 1
 # shellcheck source=./lib/common.sh
 ################################################################################
 #  File:  foxiumV2/./lib/common.sh
-#  Bundle Date: 2026-09-16 22:37:59
+#  Bundle Date: 2026-09-16 22:44:56
 ################################################################################
 
 
@@ -44,6 +44,8 @@ BACKUP_SESSION_DIR="${BACKUP_SESSION_DIR:-}"
 JQ_AVAILABLE="${JQ_AVAILABLE:-0}"
 YQ_AVAILABLE="${YQ_AVAILABLE:-0}"
 YQ_FLAVOR="${YQ_FLAVOR:-}"
+# 由 main.sh 解析命令行参数时置为 1（当前只有 --fix-oom），脚本运行期间不再改动。
+FOXIUM_NONINTERACTIVE="0"
 
 command_exists() {
     command -v "$1" >/dev/null 2>&1
@@ -107,7 +109,16 @@ exit_on_stdin_eof() {
     exit 1
 }
 
+# 自动模式（--fix-oom）：无人值守，确认一律按 y、不等待按键。
+is_noninteractive_mode() {
+    [[ "$FOXIUM_NONINTERACTIVE" == "1" ]]
+}
+
 press_enter_to_continue() {
+    if is_noninteractive_mode; then
+        return 0
+    fi
+
     printf '%b' "${YELLOW}按回车键继续...${NC}"
     read -r _ || exit_on_stdin_eof
 }
@@ -126,6 +137,11 @@ ask_confirm() {
     local default="${2:-n}"
     local suffix=""
     local response=""
+
+    if is_noninteractive_mode; then
+        printf '%b\n' "${YELLOW}${prompt}${NC} ${DIM}[非交互模式：自动按 y]${NC}"
+        return 0
+    fi
 
     case "${default,,}" in
         y) suffix=" [Y/n]: " ;;
@@ -416,6 +432,12 @@ choose_windows_start_script() {
         return 0
     fi
 
+    if is_noninteractive_mode; then
+        print_error "检测到多个 Windows 启动脚本，非交互模式无法选择："
+        printf '  %s\n' "${candidates[@]}"
+        return 1
+    fi
+
     print_info "检测到多个 Windows 启动脚本："
     printf '1. %s\n' "${candidates[0]}"
     printf '2. %s\n' "${candidates[1]}"
@@ -437,13 +459,13 @@ choose_windows_start_script() {
 
 ################################################################################
 #  End File:  foxiumV2/./lib/common.sh
-#  Bundle Date: 2026-09-16 22:37:59
+#  Bundle Date: 2026-09-16 22:44:56
 ################################################################################
 
 # shellcheck source=./lib/backup.sh
 ################################################################################
 #  File:  foxiumV2/./lib/backup.sh
-#  Bundle Date: 2026-09-16 22:37:59
+#  Bundle Date: 2026-09-16 22:44:56
 ################################################################################
 
 
@@ -533,13 +555,13 @@ create_backup() {
 
 ################################################################################
 #  End File:  foxiumV2/./lib/backup.sh
-#  Bundle Date: 2026-09-16 22:37:59
+#  Bundle Date: 2026-09-16 22:44:56
 ################################################################################
 
 # shellcheck source=./lib/detect.sh
 ################################################################################
 #  File:  foxiumV2/./lib/detect.sh
-#  Bundle Date: 2026-09-16 22:37:59
+#  Bundle Date: 2026-09-16 22:44:56
 ################################################################################
 
 
@@ -797,8 +819,20 @@ prompt_for_st_directory() {
 select_st_directory() {
     collect_st_candidates
 
+    # 自动模式下不做编号选择：猜错会改到另一个酒馆，宁可让用户手动跑一次。
+    if is_noninteractive_mode && [[ ${#ST_CANDIDATES[@]} -gt 1 ]]; then
+        print_error "检测到多个 SillyTavern 目录，非交互模式无法自动选择："
+        printf '  %s\n' "${ST_CANDIDATES[@]}"
+        print_info "请去掉 --fix-oom 手动运行一次，选择要修复的目录。"
+        return 1
+    fi
+
     if [[ ${#ST_CANDIDATES[@]} -gt 0 ]]; then
         prompt_candidate_selection && return 0
+    elif is_noninteractive_mode; then
+        print_error "未自动找到 SillyTavern 目录，非交互模式无法手动输入路径。"
+        print_info "请在酒馆目录或它的上级目录里运行，或去掉 --fix-oom 手动指定目录。"
+        return 1
     else
         print_warn "未自动找到 SillyTavern 目录。"
     fi
@@ -1042,6 +1076,11 @@ detect_optional_tool() {
 
     print_warn "未检测到 ${tool_name}"
 
+    # 非交互模式不代为安装：装包属于本次修复之外的副作用，留给用户自己决定。
+    if is_noninteractive_mode; then
+        return 1
+    fi
+
     if is_termux_environment; then
         if ask_confirm "是否尝试自动安装 ${tool_name}？" "y"; then
             if pkg install -y "$tool_name"; then
@@ -1098,7 +1137,11 @@ run_startup_checks() {
         exit 1
     fi
 
-    if ! set_user_directory; then
+    # 非交互模式不询问用户名：本次自动修复用不到用户目录，
+    # 也不会为了「看起来正常」去创建一个并不存在的用户目录。
+    if is_noninteractive_mode; then
+        print_info "非交互模式：跳过用户名检查。"
+    elif ! set_user_directory; then
         exit 1
     fi
 
@@ -1106,7 +1149,9 @@ run_startup_checks() {
 
     print_success "启动检查完成。"
     print_info "ST 目录: $ST_DIR"
-    print_info "用户目录: $USER_DIR"
+    if [[ -n "$USER_DIR" ]]; then
+        print_info "用户目录: $USER_DIR"
+    fi
     print_info "本次备份目录: $BACKUP_SESSION_DIR"
     print_info "jq: $([[ "$JQ_AVAILABLE" == "1" ]] && printf '%s' '可用' || printf '%s' '不可用')"
     print_info "yq: $([[ "$YQ_AVAILABLE" == "1" ]] && printf '%s' '可用' || printf '%s' '不可用')"
@@ -1115,13 +1160,13 @@ run_startup_checks() {
 
 ################################################################################
 #  End File:  foxiumV2/./lib/detect.sh
-#  Bundle Date: 2026-09-16 22:37:59
+#  Bundle Date: 2026-09-16 22:44:56
 ################################################################################
 
 # shellcheck source=./lib/npm_fix.sh
 ################################################################################
 #  File:  foxiumV2/./lib/npm_fix.sh
-#  Bundle Date: 2026-09-16 22:37:59
+#  Bundle Date: 2026-09-16 22:44:56
 ################################################################################
 
 
@@ -1168,13 +1213,13 @@ fix_npm_install() {
 
 ################################################################################
 #  End File:  foxiumV2/./lib/npm_fix.sh
-#  Bundle Date: 2026-09-16 22:37:59
+#  Bundle Date: 2026-09-16 22:44:56
 ################################################################################
 
 # shellcheck source=./lib/extension_fix.sh
 ################################################################################
 #  File:  foxiumV2/./lib/extension_fix.sh
-#  Bundle Date: 2026-09-16 22:37:59
+#  Bundle Date: 2026-09-16 22:44:56
 ################################################################################
 
 
@@ -1265,13 +1310,13 @@ fix_extension_uninstall() {
 
 ################################################################################
 #  End File:  foxiumV2/./lib/extension_fix.sh
-#  Bundle Date: 2026-09-16 22:37:59
+#  Bundle Date: 2026-09-16 22:44:56
 ################################################################################
 
 # shellcheck source=./lib/never_oom.sh
 ################################################################################
 #  File:  foxiumV2/./lib/never_oom.sh
-#  Bundle Date: 2026-09-16 22:37:59
+#  Bundle Date: 2026-09-16 22:44:56
 ################################################################################
 
 
@@ -1374,11 +1419,16 @@ never_oom() {
         print_info "node 架构: 未知"
     fi
 
-    if ! ask_confirm "确认执行该修复吗？" "n"; then
+    if is_noninteractive_mode; then
+        print_info "非交互模式（--fix-oom）：本次修复自动确认执行。"
+    elif ! ask_confirm "确认执行该修复吗？" "n"; then
         print_info "操作已取消。"
         press_enter_to_continue
         return
     fi
+
+    # 非交互模式下退出码是唯一的失败信号，任何一步没做成都要如实返回。
+    local failed=0
 
     print_title "[1/2] 修复旧版本缓存过期扫描"
     local should_patch_storage="1"
@@ -1390,43 +1440,59 @@ never_oom() {
     fi
 
     if [[ "$should_patch_storage" == "1" ]]; then
-        patch_expired_interval_setting "${ST_DIR}/src/users.js" "ttl: false, // Never expire" "        expiredInterval: 0,"
-        patch_expired_interval_setting "${ST_DIR}/src/endpoints/characters.js" "forgiveParseErrors: true," "            expiredInterval: 0,"
+        patch_expired_interval_setting "${ST_DIR}/src/users.js" "ttl: false, // Never expire" "        expiredInterval: 0," || failed=1
+        patch_expired_interval_setting "${ST_DIR}/src/endpoints/characters.js" "forgiveParseErrors: true," "            expiredInterval: 0," || failed=1
     fi
 
     print_title "[2/2] 提高启动脚本内存上限"
-    printf '%s\n' "1. Termux / Linux (修改 start.sh)"
-    printf '%s\n' "2. Windows (修改 Start.bat 或 start.bat)"
-    printf '%s\n' "0. 跳过此步骤"
 
     local env_choice start_file
-    while true; do
-        prompt_choice "请选择 [0-2]: " env_choice
-        case "$env_choice" in
-            1)
-                start_file="${ST_DIR}/start.sh"
-                update_start_script_memory_limit "$start_file" 4096
-                break
-                ;;
-            2)
-                if ! choose_windows_start_script start_file; then
-                    print_error "未找到可用的 Windows 启动脚本。"
-                else
-                    update_start_script_memory_limit "$start_file" 4096
-                fi
-                break
-                ;;
-            0)
-                print_info "已跳过启动脚本内存限制修改。"
-                break
-                ;;
-            *)
-                print_warn "无效的选项。"
-                ;;
-        esac
-    done
+    if is_noninteractive_mode; then
+        # 自动模式按当前平台推断酒馆是用哪个脚本拉起来的，选错等于白改。
+        if is_windows_git_bash_environment; then
+            env_choice="2"
+            print_info "非交互模式：检测到 Windows Git Bash，自动选择 Windows 启动脚本。"
+        else
+            env_choice="1"
+            print_info "非交互模式：自动选择 start.sh。"
+        fi
+    else
+        printf '%s\n' "1. Termux / Linux (修改 start.sh)"
+        printf '%s\n' "2. Windows (修改 Start.bat 或 start.bat)"
+        printf '%s\n' "0. 跳过此步骤"
 
-    print_success "Never OOM 修复流程已结束。"
+        while true; do
+            prompt_choice "请选择 [0-2]: " env_choice
+            case "$env_choice" in
+                0|1|2) break ;;
+                *) print_warn "无效的选项。" ;;
+            esac
+        done
+    fi
+
+    case "$env_choice" in
+        1)
+            start_file="${ST_DIR}/start.sh"
+            update_start_script_memory_limit "$start_file" 4096 || failed=1
+            ;;
+        2)
+            if choose_windows_start_script start_file; then
+                update_start_script_memory_limit "$start_file" 4096 || failed=1
+            else
+                print_error "未找到可用的 Windows 启动脚本。"
+                failed=1
+            fi
+            ;;
+        0)
+            print_info "已跳过启动脚本内存限制修改。"
+            ;;
+    esac
+
+    if (( failed )); then
+        print_warn "Never OOM 修复流程已结束，但有步骤未成功（见上方提示）。"
+    else
+        print_success "Never OOM 修复流程已结束。"
+    fi
     printf '\n'
     print_title "如果之后还是爆内存"
     print_info "崩溃时终端会打印一行「<脚本>: line N: PID 信号 <命令>」，照着分四种情况："
@@ -1442,17 +1508,19 @@ never_oom() {
     printf '\n'
     print_info "排查不出来时，把本功能开头显示的环境信息和崩溃时那几行一起发出来。"
     press_enter_to_continue
+
+    return "$failed"
 }
 
 ################################################################################
 #  End File:  foxiumV2/./lib/never_oom.sh
-#  Bundle Date: 2026-09-16 22:37:59
+#  Bundle Date: 2026-09-16 22:44:56
 ################################################################################
 
 # shellcheck source=./lib/gemini_media.sh
 ################################################################################
 #  File:  foxiumV2/./lib/gemini_media.sh
-#  Bundle Date: 2026-09-16 22:37:59
+#  Bundle Date: 2026-09-16 22:44:56
 ################################################################################
 
 
@@ -1540,13 +1608,13 @@ fix_gemini3_media() {
 
 ################################################################################
 #  End File:  foxiumV2/./lib/gemini_media.sh
-#  Bundle Date: 2026-09-16 22:37:59
+#  Bundle Date: 2026-09-16 22:44:56
 ################################################################################
 
 # shellcheck source=./lib/config_editor.sh
 ################################################################################
 #  File:  foxiumV2/./lib/config_editor.sh
-#  Bundle Date: 2026-09-16 22:37:59
+#  Bundle Date: 2026-09-16 22:44:56
 ################################################################################
 
 
@@ -1846,13 +1914,13 @@ config_editor_menu() {
 
 ################################################################################
 #  End File:  foxiumV2/./lib/config_editor.sh
-#  Bundle Date: 2026-09-16 22:37:59
+#  Bundle Date: 2026-09-16 22:44:56
 ################################################################################
 
 # shellcheck source=./lib/settings_editor.sh
 ################################################################################
 #  File:  foxiumV2/./lib/settings_editor.sh
-#  Bundle Date: 2026-09-16 22:37:59
+#  Bundle Date: 2026-09-16 22:44:56
 ################################################################################
 
 
@@ -1926,13 +1994,13 @@ settings_editor_menu() {
 
 ################################################################################
 #  End File:  foxiumV2/./lib/settings_editor.sh
-#  Bundle Date: 2026-09-16 22:37:59
+#  Bundle Date: 2026-09-16 22:44:56
 ################################################################################
 
 # shellcheck source=./lib/chat_limit.sh
 ################################################################################
 #  File:  foxiumV2/./lib/chat_limit.sh
-#  Bundle Date: 2026-09-16 22:37:59
+#  Bundle Date: 2026-09-16 22:44:56
 ################################################################################
 
 
@@ -1998,13 +2066,13 @@ remove_chat_size_limit() {
 
 ################################################################################
 #  End File:  foxiumV2/./lib/chat_limit.sh
-#  Bundle Date: 2026-09-16 22:37:59
+#  Bundle Date: 2026-09-16 22:44:56
 ################################################################################
 
 # shellcheck source=./lib/auto_backup.sh
 ################################################################################
 #  File:  foxiumV2/./lib/auto_backup.sh
-#  Bundle Date: 2026-09-16 22:37:59
+#  Bundle Date: 2026-09-16 22:44:56
 ################################################################################
 
 
@@ -2253,7 +2321,7 @@ enable_auto_backup() {
 
 ################################################################################
 #  End File:  foxiumV2/./lib/auto_backup.sh
-#  Bundle Date: 2026-09-16 22:37:59
+#  Bundle Date: 2026-09-16 22:44:56
 ################################################################################
 
 
@@ -2393,6 +2461,34 @@ main_loop() {
     done
 }
 
+show_usage() {
+    printf '%s\n' "用法: bash ffss.sh [选项]"
+    printf '%s\n' "  --fix-oom   非交互执行「二合一爆内存修复」，所有确认自动按 y 处理"
+    printf '%s\n' "  -h, --help  显示本帮助"
+    printf '%s\n' "不带选项时进入交互菜单。"
+}
+
+parse_cli_args() {
+    local arg
+
+    for arg in "$@"; do
+        case "$arg" in
+            --fix-oom)
+                FOXIUM_NONINTERACTIVE="1"
+                ;;
+            -h|--help)
+                show_usage
+                exit 0
+                ;;
+            *)
+                print_error "未知的参数: $arg"
+                show_usage
+                return 1
+                ;;
+        esac
+    done
+}
+
 handle_interrupt() {
     printf '\n'
     print_warn "已中断。"
@@ -2405,13 +2501,29 @@ handle_interrupt() {
 
 main() {
     trap handle_interrupt INT
+
+    if ! parse_cli_args "$@"; then
+        exit 1
+    fi
+
+    if is_noninteractive_mode; then
+        print_title "--fix-oom 非交互模式"
+        print_info "所有确认自动按 y 处理；遇到无法自动决定的选择会直接报错退出。"
+    fi
+
     run_startup_checks
+
+    if is_noninteractive_mode; then
+        never_oom
+        exit $?
+    fi
+
     main_loop
 }
 
-main
+main "$@"
 ################################################################################
 #  End File:  ./foxiumV2/main.sh
-#  Bundle Date: 2026-09-16 22:37:59
+#  Bundle Date: 2026-09-16 22:44:56
 ################################################################################
 
