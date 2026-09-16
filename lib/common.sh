@@ -107,10 +107,6 @@ to_lower() {
     printf '%s' "${1,,}"
 }
 
-is_integer() {
-    [[ "$1" =~ ^-?[0-9]+$ ]]
-}
-
 is_positive_integer() {
     [[ "$1" =~ ^[0-9]+$ ]] && (( 10#$1 > 0 ))
 }
@@ -292,12 +288,6 @@ yaml_write() {
     esac
 }
 
-json_read() {
-    local expr="$1"
-    local file="$2"
-    jq -r "$expr" "$file"
-}
-
 json_update_file() {
     local file="$1"
     local expr="$2"
@@ -336,15 +326,6 @@ insert_line_after_anchor() {
 
     rm -f "$temp_file"
     return 1
-}
-
-escape_html() {
-    local value="$1"
-    value="${value//&/&amp;}"
-    value="${value//</&lt;}"
-    value="${value//>/&gt;}"
-    value="${value//\"/&quot;}"
-    printf '%s' "$value"
 }
 
 choose_windows_start_script() {

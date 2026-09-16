@@ -113,9 +113,6 @@ trim_whitespace() {
 to_lower() {
     printf '%s' "${1,,}"
 }
-is_integer() {
-    [[ "$1" =~ ^-?[0-9]+$ ]]
-}
 is_positive_integer() {
     [[ "$1" =~ ^[0-9]+$ ]] && ((10#$1 > 0))
 }
@@ -283,11 +280,6 @@ yaml_write() {
         *) return 1 ;;
     esac
 }
-json_read() {
-    local expr="$1"
-    local file="$2"
-    jq -r "$expr" "$file"
-}
 json_update_file() {
     local file="$1"
     local expr="$2"
@@ -325,14 +317,6 @@ insert_line_after_anchor() {
 
     rm -f "$temp_file"
     return 1
-}
-escape_html() {
-    local value="$1"
-    value="${value//&/&amp;}"
-    value="${value//</&lt;}"
-    value="${value//>/&gt;}"
-    value="${value//\"/&quot;}"
-    printf '%s' "$value"
 }
 choose_windows_start_script() {
     local __resultvar="$1"
@@ -439,8 +423,7 @@ init_backup_session() {
     done
 }
 resolve_backup_destination() {
-    local input_path="$1"
-    local base_name="$2"
+    local base_name="$1"
     local candidate_path="${BACKUP_SESSION_DIR}/${base_name}"
     local index=2
 
@@ -470,7 +453,7 @@ create_backup() {
 
     local base_name destination
     base_name="$(basename "$input_path")"
-    destination="$(resolve_backup_destination "$input_path" "$base_name")" || return 1
+    destination="$(resolve_backup_destination "$base_name")"
 
     if [[ -d "$input_path" ]]; then
         if cp -R "$input_path" "$destination"; then
@@ -2047,7 +2030,7 @@ main() {
     run_startup_checks
     main_loop
 }
-main "$@"
+main
 
 
 ################################################################################

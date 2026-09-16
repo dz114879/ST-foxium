@@ -35,8 +35,7 @@ init_backup_session() {
 }
 
 resolve_backup_destination() {
-    local input_path="$1"
-    local base_name="$2"
+    local base_name="$1"
     local candidate_path="${BACKUP_SESSION_DIR}/${base_name}"
     local index=2
 
@@ -67,7 +66,7 @@ create_backup() {
 
     local base_name destination
     base_name="$(basename "$input_path")"
-    destination="$(resolve_backup_destination "$input_path" "$base_name")" || return 1
+    destination="$(resolve_backup_destination "$base_name")"
 
     if [[ -d "$input_path" ]]; then
         if cp -R "$input_path" "$destination"; then

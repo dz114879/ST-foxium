@@ -173,4 +173,4 @@ main() {
     main_loop
 }
 
-main "$@"
+main
