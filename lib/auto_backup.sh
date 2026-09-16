@@ -142,7 +142,10 @@ enable_auto_backup() {
         return
     fi
 
-    create_backup "$target_file"
+    create_backup "$target_file" || {
+        press_enter_to_continue
+        return
+    }
     block_file="$(make_temp_next_to "$target_file")" || {
         print_error "无法创建临时文件。"
         press_enter_to_continue

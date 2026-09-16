@@ -33,7 +33,10 @@ apply_settings_change() {
         return
     fi
 
-    create_backup "$settings_file"
+    create_backup "$settings_file" || {
+        press_enter_to_continue
+        return
+    }
     if json_update_file "$settings_file" "$jq_expr"; then
         print_success "${description} 已完成。"
     else

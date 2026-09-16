@@ -30,7 +30,11 @@ remove_chat_size_limit() {
         return
     }
 
-    create_backup "$server_main"
+    create_backup "$server_main" || {
+        rm -f "$temp_file"
+        press_enter_to_continue
+        return
+    }
     if awk '
         {
             line = $0

@@ -54,7 +54,10 @@ toggle_config_boolean() {
         return
     fi
 
-    backup_config_editor_file
+    backup_config_editor_file || {
+        press_enter_to_continue
+        return
+    }
     if yaml_write "${yaml_path} = ${next_value}" "$config_file"; then
         print_success "${label} 已切换为 ${next_value}"
     else
@@ -117,7 +120,10 @@ config_edit_port() {
         return
     fi
 
-    backup_config_editor_file
+    backup_config_editor_file || {
+        press_enter_to_continue
+        return
+    }
     if yaml_write ".port = ${new_port}" "$config_file"; then
         print_success "端口已修改为 ${new_port}"
     else
@@ -149,7 +155,10 @@ config_edit_backup_count() {
         return
     fi
 
-    backup_config_editor_file
+    backup_config_editor_file || {
+        press_enter_to_continue
+        return
+    }
     if yaml_write ".backups.common.numberOfBackups = ${new_count}" "$config_file"; then
         print_success "备份保留数量已修改为 ${new_count}"
     else
@@ -196,7 +205,10 @@ config_configure_proxy() {
                     return
                 fi
 
-                backup_config_editor_file
+                backup_config_editor_file || {
+                    press_enter_to_continue
+                    return
+                }
                 if yaml_write ".requestProxy.enabled = true | .requestProxy.url = \"${escaped_url}\"" "$config_file"; then
                     print_success "代理配置已更新。"
                 else
@@ -213,7 +225,10 @@ config_configure_proxy() {
                     return
                 fi
 
-                backup_config_editor_file
+                backup_config_editor_file || {
+                    press_enter_to_continue
+                    return
+                }
                 if yaml_write '.requestProxy.enabled = false' "$config_file"; then
                     print_success "代理已关闭。"
                 else

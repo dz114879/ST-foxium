@@ -20,7 +20,7 @@ patch_expired_interval_setting() {
         return 0
     fi
 
-    create_backup "$target_file"
+    create_backup "$target_file" || return 1
     if insert_line_after_anchor "$target_file" "$anchor" "$inserted_line"; then
         print_success "已修改 $(basename "$target_file")"
         return 0
@@ -46,7 +46,10 @@ update_start_script_memory_limit() {
     fi
 
     temp_file="$(make_temp_next_to "$start_file")" || return 1
-    create_backup "$start_file"
+    create_backup "$start_file" || {
+        rm -f "$temp_file"
+        return 1
+    }
 
     if awk -v memory_size="$memory_size" '
         {
@@ -90,6 +93,8 @@ never_oom() {
     if [[ -n "$ST_VERSION" ]] && check_st_version ">=" 1 13 5; then
         should_patch_storage="0"
         print_info "当前 ST 版本为 ${ST_VERSION}，官方已包含该修复，跳过源码补丁。"
+    elif [[ -z "$ST_VERSION" ]]; then
+        print_warn "无法读取 ST 版本，将按旧版本处理。"
     fi
 
     if [[ "$should_patch_storage" == "1" ]]; then

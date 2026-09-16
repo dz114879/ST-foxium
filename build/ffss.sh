@@ -43,6 +43,7 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 clear_screen() {
+    [[ -t 1 ]] || return 0
     if command_exists clear; then
         clear
     fi
@@ -1036,7 +1037,10 @@ fix_extension_uninstall() {
         return
     fi
 
-    create_backup "${extension_paths[$selection]}"
+    create_backup "${extension_paths[$selection]}" || {
+        press_enter_to_continue
+        return
+    }
     if rm -rf "${extension_paths[$selection]}"; then
         print_success "扩展已删除：${extension_names[$selection]}"
     else
@@ -1081,7 +1085,7 @@ patch_expired_interval_setting() {
         return 0
     fi
 
-    create_backup "$target_file"
+    create_backup "$target_file" || return 1
     if insert_line_after_anchor "$target_file" "$anchor" "$inserted_line"; then
         print_success "已修改 $(basename "$target_file")"
         return 0
@@ -1106,7 +1110,10 @@ update_start_script_memory_limit() {
     fi
 
     temp_file="$(make_temp_next_to "$start_file")" || return 1
-    create_backup "$start_file"
+    create_backup "$start_file" || {
+        rm -f "$temp_file"
+        return 1
+    }
 
     if awk -v memory_size="$memory_size" '
         {
@@ -1149,6 +1156,8 @@ never_oom() {
     if [[ -n "$ST_VERSION" ]] && check_st_version ">=" 1 13 5; then
         should_patch_storage="0"
         print_info "当前 ST 版本为 ${ST_VERSION}，官方已包含该修复，跳过源码补丁。"
+    elif [[ -z "$ST_VERSION" ]]; then
+        print_warn "无法读取 ST 版本，将按旧版本处理。"
     fi
 
     if [[ "$should_patch_storage" == "1" ]]; then
@@ -1223,6 +1232,10 @@ fix_gemini3_media() {
     print_title "允许给 Gemini 3 系列模型发图"
     print_risk "此功能会直接修改 public/scripts/openai.js。"
 
+    if [[ -z "$ST_VERSION" ]]; then
+        print_warn "无法读取 ST 版本，将按旧版本处理。"
+    fi
+
     if [[ -n "$ST_VERSION" ]] && check_st_version ">" 1 13 999; then
         print_info "当前 ST 版本为 ${ST_VERSION}，已经不需要使用此功能。"
         press_enter_to_continue
@@ -1244,7 +1257,10 @@ fix_gemini3_media() {
 
     local modified=0
     if ! array_contains_model "$openai_js" "const visionSupportedModels = [" "'gemini-3'"; then
-        create_backup "$openai_js"
+        create_backup "$openai_js" || {
+            press_enter_to_continue
+            return
+        }
         if insert_line_after_anchor "$openai_js" "const visionSupportedModels = [" "        'gemini-3',"; then
             print_success "已把 gemini-3 加入 visionSupportedModels"
             modified=1
@@ -1257,7 +1273,10 @@ fix_gemini3_media() {
 
     if ! array_contains_model "$openai_js" "const videoSupportedModels = [" "'gemini-3'"; then
         if ((modified == 0)); then
-            create_backup "$openai_js"
+            create_backup "$openai_js" || {
+                press_enter_to_continue
+                return
+            }
         fi
         if insert_line_after_anchor "$openai_js" "const videoSupportedModels = [" "        'gemini-3',"; then
             print_success "已把 gemini-3 加入 videoSupportedModels"
@@ -1344,7 +1363,10 @@ toggle_config_boolean() {
         return
     fi
 
-    backup_config_editor_file
+    backup_config_editor_file || {
+        press_enter_to_continue
+        return
+    }
     if yaml_write "${yaml_path} = ${next_value}" "$config_file"; then
         print_success "${label} 已切换为 ${next_value}"
     else
@@ -1406,7 +1428,10 @@ config_edit_port() {
         return
     fi
 
-    backup_config_editor_file
+    backup_config_editor_file || {
+        press_enter_to_continue
+        return
+    }
     if yaml_write ".port = ${new_port}" "$config_file"; then
         print_success "端口已修改为 ${new_port}"
     else
@@ -1437,7 +1462,10 @@ config_edit_backup_count() {
         return
     fi
 
-    backup_config_editor_file
+    backup_config_editor_file || {
+        press_enter_to_continue
+        return
+    }
     if yaml_write ".backups.common.numberOfBackups = ${new_count}" "$config_file"; then
         print_success "备份保留数量已修改为 ${new_count}"
     else
@@ -1482,7 +1510,10 @@ config_configure_proxy() {
                     return
             fi
 
-                backup_config_editor_file
+                backup_config_editor_file || {
+                    press_enter_to_continue
+                    return
+                }
                 if yaml_write ".requestProxy.enabled = true | .requestProxy.url = \"${escaped_url}\"" "$config_file"; then
                     print_success "代理配置已更新。"
             else
@@ -1499,7 +1530,10 @@ config_configure_proxy() {
                     return
             fi
 
-                backup_config_editor_file
+                backup_config_editor_file || {
+                    press_enter_to_continue
+                    return
+                }
                 if yaml_write '.requestProxy.enabled = false' "$config_file"; then
                     print_success "代理已关闭。"
             else
@@ -1607,7 +1641,10 @@ apply_settings_change() {
         return
     fi
 
-    create_backup "$settings_file"
+    create_backup "$settings_file" || {
+        press_enter_to_continue
+        return
+    }
     if json_update_file "$settings_file" "$jq_expr"; then
         print_success "${description} 已完成。"
     else
@@ -1683,7 +1720,11 @@ remove_chat_size_limit() {
         return
     }
 
-    create_backup "$server_main"
+    create_backup "$server_main" || {
+        rm -f "$temp_file"
+        press_enter_to_continue
+        return
+    }
     if awk '
         {
             line = $0
@@ -1863,7 +1904,10 @@ enable_auto_backup() {
         return
     fi
 
-    create_backup "$target_file"
+    create_backup "$target_file" || {
+        press_enter_to_continue
+        return
+    }
     block_file="$(make_temp_next_to "$target_file")" || {
         print_error "无法创建临时文件。"
         press_enter_to_continue

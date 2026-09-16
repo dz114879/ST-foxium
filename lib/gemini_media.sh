@@ -17,6 +17,10 @@ fix_gemini3_media() {
     print_title "允许给 Gemini 3 系列模型发图"
     print_risk "此功能会直接修改 public/scripts/openai.js。"
 
+    if [[ -z "$ST_VERSION" ]]; then
+        print_warn "无法读取 ST 版本，将按旧版本处理。"
+    fi
+
     if [[ -n "$ST_VERSION" ]] && check_st_version ">" 1 13 999; then
         print_info "当前 ST 版本为 ${ST_VERSION}，已经不需要使用此功能。"
         press_enter_to_continue
@@ -38,7 +42,10 @@ fix_gemini3_media() {
 
     local modified=0
     if ! array_contains_model "$openai_js" "const visionSupportedModels = [" "'gemini-3'"; then
-        create_backup "$openai_js"
+        create_backup "$openai_js" || {
+            press_enter_to_continue
+            return
+        }
         if insert_line_after_anchor "$openai_js" "const visionSupportedModels = [" "        'gemini-3',"; then
             print_success "已把 gemini-3 加入 visionSupportedModels"
             modified=1
@@ -51,7 +58,10 @@ fix_gemini3_media() {
 
     if ! array_contains_model "$openai_js" "const videoSupportedModels = [" "'gemini-3'"; then
         if (( modified == 0 )); then
-            create_backup "$openai_js"
+            create_backup "$openai_js" || {
+                press_enter_to_continue
+                return
+            }
         fi
         if insert_line_after_anchor "$openai_js" "const videoSupportedModels = [" "        'gemini-3',"; then
             print_success "已把 gemini-3 加入 videoSupportedModels"

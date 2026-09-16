@@ -72,7 +72,10 @@ fix_extension_uninstall() {
         return
     fi
 
-    create_backup "${extension_paths[$selection]}"
+    create_backup "${extension_paths[$selection]}" || {
+        press_enter_to_continue
+        return
+    }
     if rm -rf "${extension_paths[$selection]}"; then
         print_success "扩展已删除：${extension_names[$selection]}"
     else

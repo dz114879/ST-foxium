@@ -25,6 +25,8 @@ command_exists() {
 }
 
 clear_screen() {
+    [[ -t 1 ]] || return 0
+
     if command_exists clear; then
         clear
     fi
