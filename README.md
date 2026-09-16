@@ -30,15 +30,15 @@ FFSS (Foxium V2) 是一个面向 SillyTavern 的交互式 Bash 工具，提供�
 
 ## 使用方式
 
-先`cd`到ST根目录(有`start.bat`的那个目录)，或ST的上一级目录。依次执行: 
+先 `cd` 到 ST 根目录（有 `start.bat` 的那个目录），或 ST 的上一级目录，然后一行执行：
 
 ```bash
-curl -L "https://raw.githubusercontent.com/dz114879/ST-foxium/refs/heads/main/build/ffss.sh" -o ffss.sh
-chmod +x ffss.sh
-./ffss.sh
+curl -fL --retry 3 --connect-timeout 15 "https://raw.githubusercontent.com/dz114879/ST-foxium/refs/heads/main/build/ffss.sh" -o ffss.sh && bash ffss.sh
 ```
 
-以后再想启动，无需再次下载，直接使用`./ffss.sh`即可。
+`-f` 让下载出错时直接失败，不会把「404: Not Found」这类错误页面存成 ffss.sh；`&&` 保证只有下载完整才会执行。以后再想启动，无需再次下载，直接 `bash ffss.sh` 即可。
+
+想先看看脚本内容再运行：把命令末尾的 `&& bash ffss.sh` 去掉，用 `less ffss.sh` 查看，确认后再 `bash ffss.sh`。
 
 ---
 
