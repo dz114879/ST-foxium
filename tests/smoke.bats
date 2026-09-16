@@ -11,7 +11,7 @@ setup() {
     local sandbox="${BATS_TEST_TMPDIR}/sandbox"
     local st="${BATS_TEST_TMPDIR}/SillyTavern"
 
-    mkdir -p "$sandbox" "${st}/data/default-user"
+    mkdir -p "$sandbox" "${st}/data/default-user" "${BATS_TEST_TMPDIR}/home"
     cp "${REPO_ROOT}/main.sh" "${sandbox}/main.sh"
     cp -R "${REPO_ROOT}/lib" "${sandbox}/lib"
 
@@ -19,11 +19,14 @@ setup() {
     printf '{"name":"sillytavern","version":"1.12.0"}\n' > "${st}/package.json"
     printf '{}\n' > "${st}/data/default-user/settings.json"
 
-    # user name (blank -> default-user), summary screen, then "0" to exit
-    printf '\n\n0\n' > "${BATS_TEST_TMPDIR}/stdin.txt"
+    # candidate confirmation (blank -> yes), user name (blank -> default-user),
+    # the startup summary prompt, then "0" to exit
+    printf '\n\n\n0\n' > "${BATS_TEST_TMPDIR}/stdin.txt"
 
     cd "$sandbox"
-    run env TERM=dumb bash main.sh < "${BATS_TEST_TMPDIR}/stdin.txt"
+    # A throwaway HOME keeps the $HOME scan from picking up a real SillyTavern
+    # installation and changing the number of candidates.
+    run env TERM=dumb HOME="${BATS_TEST_TMPDIR}/home" bash main.sh < "${BATS_TEST_TMPDIR}/stdin.txt"
 
     [ "$status" -eq 0 ]
 

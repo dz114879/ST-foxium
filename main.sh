@@ -7,6 +7,9 @@ if [[ ! -d "$FOXIUM_ROOT/lib" && -d "$SCRIPT_DIR/../lib" ]]; then
     FOXIUM_ROOT="$(cd "$SCRIPT_DIR/.." && pwd -P)"
 fi
 
+# 用户敲命令时所在的目录，手输相对路径时优先按它解析。
+FOXIUM_INVOCATION_DIR="$(pwd -P)"
+
 cd "$FOXIUM_ROOT" || exit 1
 
 # shellcheck source=./lib/common.sh

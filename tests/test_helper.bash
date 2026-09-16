@@ -24,6 +24,16 @@ source_libs() {
     done
 }
 
+# Write the two files is_valid_st_dir requires; callers add whatever else their
+# fixture needs.
+make_st_root() {
+    local dir="$1"
+
+    mkdir -p "$dir"
+    : > "${dir}/server.js"
+    printf '{"name":"sillytavern","version":"1.12.0"}\n' > "${dir}/package.json"
+}
+
 # Build the smallest tree that passes is_valid_st_dir and gives the patched or
 # edited files somewhere to live. Everything goes under BATS_TEST_TMPDIR so the
 # real checkout is never touched.
@@ -32,9 +42,8 @@ make_st_fixture() {
     USER_NAME="default-user"
     USER_DIR="${ST_DIR}/data/${USER_NAME}"
 
+    make_st_root "$ST_DIR"
     mkdir -p "${USER_DIR}"
-    : > "${ST_DIR}/server.js"
-    printf '{"name":"sillytavern","version":"1.12.0"}\n' > "${ST_DIR}/package.json"
     printf 'port: 8000\n' > "${ST_DIR}/config.yaml"
     printf '{}\n' > "${USER_DIR}/settings.json"
     printf '#!/usr/bin/env bash\nnode server.js\n' > "${ST_DIR}/start.sh"

@@ -1,12 +1,18 @@
 #!/usr/bin/env bash
 
 declare -a ST_CANDIDATES=()
+declare -a ST_SEARCH_ROOTS=()
 FOXIUM_JQ_WINDOWS_VERSION="${FOXIUM_JQ_WINDOWS_VERSION:-1.8.1}"
 FOXIUM_YQ_WINDOWS_VERSION="${FOXIUM_YQ_WINDOWS_VERSION:-v4.52.5}"
 
 is_valid_st_dir() {
     local candidate="$1"
     [[ -d "$candidate" && -f "${candidate}/server.js" && -f "${candidate}/package.json" ]]
+}
+
+set_st_dir() {
+    ST_DIR="$1"
+    print_success "已设置 ST 目录: $ST_DIR"
 }
 
 add_st_candidate() {
@@ -37,88 +43,221 @@ scan_candidate_root() {
 
     add_st_candidate "$root"
 
-    for candidate in \
-        "${root}/SillyTavern" \
-        "${root}/sillytavern" \
-        "${root}/ST" \
-        "${root}/st" \
-        "${root}"/SillyTavern-*; do
-        [[ -e "$candidate" ]] || continue
-        add_st_candidate "$candidate"
+    # 按 server.js + package.json 的特征识别，不依赖目录名，
+    # 改名、大小写、带版本号后缀的目录都能被找到。
+    for candidate in "$root"/*/; do
+        add_st_candidate "${candidate%/}"
+    done
+}
+
+# 可能藏着 ST 的位置；自动扫描与手输相对路径共用这一份列表。
+# 先规范化再去重，脚本放在主目录里时不会把同一个目录扫两遍。
+build_st_search_roots() {
+    ST_SEARCH_ROOTS=()
+
+    local root resolved existing
+    local -a roots=()
+
+    if [[ -n "${FOXIUM_INVOCATION_DIR:-}" ]]; then
+        roots+=("$FOXIUM_INVOCATION_DIR")
+    fi
+    if [[ -n "$FOXIUM_ROOT" ]]; then
+        roots+=("$FOXIUM_ROOT" "${FOXIUM_ROOT}/..")
+    fi
+    if [[ -n "${HOME:-}" ]]; then
+        roots+=("$HOME" "${HOME}/storage/shared")
+    fi
+
+    for root in "${roots[@]}"; do
+        resolved="$(canonical_path "$root")" || continue
+
+        for existing in "${ST_SEARCH_ROOTS[@]}"; do
+            if [[ "$existing" == "$resolved" ]]; then
+                continue 2
+            fi
+        done
+
+        ST_SEARCH_ROOTS+=("$resolved")
     done
 }
 
 collect_st_candidates() {
     ST_CANDIDATES=()
 
-    scan_candidate_root "$FOXIUM_ROOT"
-    scan_candidate_root "$(cd "$FOXIUM_ROOT/.." && pwd -P)"
-    scan_candidate_root "$(pwd -P)"
+    build_st_search_roots
+
+    local root
+    for root in "${ST_SEARCH_ROOTS[@]}"; do
+        scan_candidate_root "$root"
+    done
+}
+
+# read 不会展开 ~、$HOME，也不会去掉引号，用户粘贴的 Windows 反斜杠路径也要处理。
+expand_user_path() {
+    local input="$1"
+
+    if [[ ${#input} -ge 2 ]] && [[ "$input" == \"*\" || "$input" == \'*\' ]]; then
+        input="${input:1:${#input}-2}"
+    fi
+
+    input="${input//\\//}"
+
+    if [[ "$input" =~ ^([A-Za-z]):/(.*)$ ]]; then
+        input="/$(to_lower "${BASH_REMATCH[1]}")/${BASH_REMATCH[2]}"
+    fi
+
+    case "$input" in
+        '~'|'$HOME'|'${HOME}') input="${HOME:-}" ;;
+        '~/'*|'$HOME/'*|'${HOME}/'*) input="${HOME:-}/${input#*/}" ;;
+    esac
+
+    printf '%s' "$input"
+}
+
+# 把用户输入解析成真实存在的路径（文件或目录），成功时输出规范化后的绝对路径。
+# 绝对路径直接用，相对路径按搜索根依次尝试。
+resolve_user_path() {
+    local input="$1"
+    local base attempt
+
+    if [[ "$input" == /* ]]; then
+        [[ -e "$input" ]] || return 1
+        canonical_path "$input" || return 1
+        return 0
+    fi
+
+    build_st_search_roots
+
+    for base in "${ST_SEARCH_ROOTS[@]}"; do
+        attempt="${base%/}/${input}"
+        if [[ -e "$attempt" ]]; then
+            canonical_path "$attempt" || return 1
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+# 接纳用户输入的路径：文件取它所在的目录，然后校验、纠错，必要时向上或向下找。
+accept_user_directory() {
+    local directory="$1"
+    local missing="" name
+    local ancestor parent
+    local -i level
+
+    if [[ ! -d "$directory" ]]; then
+        print_info "你输入的是一个文件，改用它所在的目录。"
+        directory="$(dirname "$directory")"
+    fi
+
+    if is_valid_st_dir "$directory"; then
+        set_st_dir "$directory"
+        return 0
+    fi
+
+    for name in server.js package.json; do
+        [[ -f "${directory}/${name}" ]] || missing="${missing:+${missing}、}${name}"
+    done
+    print_warn "该目录里缺少 ${missing}，不是有效的 SillyTavern 根目录。"
+
+    ancestor="$directory"
+    for ((level = 0; level < 3; level++)); do
+        parent="$(dirname "$ancestor")"
+        [[ "$parent" != "$ancestor" ]] || break
+        ancestor="$parent"
+
+        if is_valid_st_dir "$ancestor"; then
+            print_info "输入的目录位于 SillyTavern 根目录内部。"
+            ask_confirm "是否改用根目录 ${ancestor}？" "y" || return 1
+            set_st_dir "$ancestor"
+            return 0
+        fi
+    done
+
+    ST_CANDIDATES=()
+    scan_candidate_root "$directory"
+    if [[ ${#ST_CANDIDATES[@]} -gt 0 ]]; then
+        print_info "该目录下找到可用的 SillyTavern 目录。"
+        prompt_candidate_selection && return 0
+        return 1
+    fi
+
+    print_warn "没有在 ${directory} 里找到 SillyTavern（server.js 和 package.json 必须同时存在）。"
+    return 1
+}
+
+# 从 ST_CANDIDATES 里确定目录：唯一候选要用户确认，多个候选按编号选择。
+prompt_candidate_selection() {
+    local candidate selection
+    local index=1
+
+    if [[ ${#ST_CANDIDATES[@]} -eq 1 ]]; then
+        if ! ask_confirm "检测到 SillyTavern 目录: ${ST_CANDIDATES[0]}，是否使用？" "y"; then
+            print_info "已跳过这个目录，改为手动输入。"
+            return 1
+        fi
+        set_st_dir "${ST_CANDIDATES[0]}"
+        return 0
+    fi
+
+    print_info "找到多个可用的 SillyTavern 目录："
+    for candidate in "${ST_CANDIDATES[@]}"; do
+        printf '%s. %s\n' "$index" "$candidate"
+        ((index++))
+    done
+
+    while true; do
+        prompt_choice "请选择要使用的目录编号 [0 手动输入]: " selection
+
+        if [[ "$selection" == "0" ]]; then
+            print_info "已跳过候选列表，改为手动输入。"
+            return 1
+        fi
+
+        if is_positive_integer "$selection" && (( selection >= 1 && selection <= ${#ST_CANDIDATES[@]} )); then
+            set_st_dir "${ST_CANDIDATES[$((selection - 1))]}"
+            return 0
+        fi
+
+        print_warn "无效的选择。"
+    done
 }
 
 prompt_for_st_directory() {
-    local user_input resolved_path
+    local user_input expanded_path resolved_path
 
-    print_warn "未自动找到 SillyTavern 目录。"
     print_info "请输入 SillyTavern 根目录，目录内需要同时包含 server.js 和 package.json。"
+    print_info "支持 ~ 开头的主目录路径；直接回车或输入 q 可退出。"
+    print_info "不清楚目录在哪？可以运行 ls ~ 查看主目录，或运行 find ~ -maxdepth 3 -name server.js 搜索。"
 
     while true; do
         prompt_choice "ST 目录路径: " user_input
         user_input="$(trim_whitespace "$user_input")"
 
-        if [[ -z "$user_input" ]]; then
-            print_warn "路径不能为空。"
+        if [[ -z "$user_input" || "${user_input,,}" == "q" ]]; then
+            print_info "已跳过手动输入。"
+            return 1
+        fi
+
+        expanded_path="$(expand_user_path "$user_input")"
+
+        if resolved_path="$(resolve_user_path "$expanded_path")"; then
+            accept_user_directory "$resolved_path" && return 0
             continue
         fi
 
-        if [[ -d "$user_input" ]]; then
-            resolved_path="$(canonical_path "$user_input")"
-        elif [[ -d "${FOXIUM_ROOT}/../${user_input}" ]]; then
-            resolved_path="$(canonical_path "${FOXIUM_ROOT}/../${user_input}")"
-        else
-            print_warn "目录不存在: $user_input"
-            continue
-        fi
-
-        if is_valid_st_dir "$resolved_path"; then
-            ST_DIR="$resolved_path"
-            print_success "已设置 ST 目录: $ST_DIR"
-            return 0
-        fi
-
-        print_warn "该目录不是有效的 SillyTavern 根目录。"
+        print_warn "目录不存在: $user_input"
     done
 }
 
 select_st_directory() {
     collect_st_candidates
 
-    if [[ ${#ST_CANDIDATES[@]} -eq 1 ]]; then
-        ST_DIR="${ST_CANDIDATES[0]}"
-        print_success "已找到 ST 目录: $ST_DIR"
-        return 0
-    fi
-
-    if [[ ${#ST_CANDIDATES[@]} -gt 1 ]]; then
-        print_info "找到多个可用的 SillyTavern 目录："
-        local index=1
-        local candidate
-        for candidate in "${ST_CANDIDATES[@]}"; do
-            printf '%s. %s\n' "$index" "$candidate"
-            ((index++))
-        done
-
-        while true; do
-            prompt_choice "请选择要使用的目录编号: " selection
-
-            if is_positive_integer "$selection" && (( selection >= 1 && selection <= ${#ST_CANDIDATES[@]} )); then
-                ST_DIR="${ST_CANDIDATES[$((selection - 1))]}"
-                print_success "已设置 ST 目录: $ST_DIR"
-                return 0
-            fi
-
-            print_warn "无效的选择。"
-        done
+    if [[ ${#ST_CANDIDATES[@]} -gt 0 ]]; then
+        prompt_candidate_selection && return 0
+    else
+        print_warn "未自动找到 SillyTavern 目录。"
     fi
 
     prompt_for_st_directory
