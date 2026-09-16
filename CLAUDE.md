@@ -15,7 +15,7 @@
 ## 项目硬约定
 
 - 任何会修改文件的动作，必须先 `create_backup`，再执行修改；这是对用户数据的既有承诺。`tests/test_helper.bash` 的 `assert_backed_up` 把它变成可执行的断言。
-- `build/ffss.sh` 是发布用单文件产物（`main.sh` 与全部 `lib/` 的拼接），README 的安装命令直接下载它；改完 `lib/` 必须重新生成它，否则用户拿不到新代码。`tests/static_checks.bats` 会逐文件比对两者（剥掉全部空白后做子串检查，因此格式化差异不影响判定）。
+- `build/ffss.sh` 是发布用单文件产物（`main.sh` 与全部 `lib/` 的拼接），README 的安装命令直接下载它；改完 `lib/` 必须用 `bash build/bundle.sh` 重新生成它，否则用户拿不到新代码。`tests/static_checks.bats` 会逐文件比对两者（剥掉全部空白后做子串检查，因此格式化差异不影响判定）。
 - 改动 `lib/`、`main.sh` 或 `build/ffss.sh` 后跑 `bats tests/`（bats 只在开发机上跑，没有 CI）。测试只断言退出码与文件系统副作用，不断言中文提示文案，改措辞不应让测试变红。
 - 面向 bash 4+ 编写，保持 Termux / Linux / Git Bash 三平台可用；路径处理一律加引号，不假定有 root 或 systemd。
 
