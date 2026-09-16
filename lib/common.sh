@@ -70,9 +70,21 @@ print_title() {
     printf '%b\n\n' "${BOLD}${CYAN}========================================${NC}"
 }
 
+# stdin 关闭后（终端里按 Ctrl-D，或输入被重定向且已读完）read 会立即失败。
+# 调用方多半在 while 循环里，空输入会被当成无效选项一直刷屏，所以所有交互
+# 读取失败时统一从这里退出。
+exit_on_stdin_eof() {
+    printf '\n'
+    print_warn "标准输入已结束，无法继续交互，退出脚本。"
+    if [[ -n "$BACKUP_SESSION_DIR" ]]; then
+        print_info "本次备份目录: $BACKUP_SESSION_DIR"
+    fi
+    exit 1
+}
+
 press_enter_to_continue() {
     printf '%b' "${YELLOW}按回车键继续...${NC}"
-    read -r _
+    read -r _ || exit_on_stdin_eof
 }
 
 prompt_choice() {
@@ -80,7 +92,7 @@ prompt_choice() {
     local __resultvar="$2"
     local response
     printf '%b' "${YELLOW}${prompt}${NC}"
-    read -r response
+    read -r response || exit_on_stdin_eof
     printf -v "$__resultvar" '%s' "$response"
 }
 
@@ -97,7 +109,7 @@ ask_confirm() {
 
     while true; do
         printf '%b' "${YELLOW}${prompt}${suffix}${NC}"
-        read -r response
+        read -r response || exit_on_stdin_eof
         response="$(trim_whitespace "${response:-$default}")"
 
         case "${response,,}" in

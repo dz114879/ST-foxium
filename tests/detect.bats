@@ -150,7 +150,8 @@ setup() {
     ST_DIR=""
     local status=0
 
-    prompt_for_st_directory <<< '~/SillyTavern/nope.txt' > /dev/null || status=$?
+    # the first path does not exist, so the script asks again; q then exits
+    prompt_for_st_directory <<< $'~/SillyTavern/nope.txt\nq' > /dev/null || status=$?
 
     [ "$status" -ne 0 ]
     [ -z "$ST_DIR" ]
@@ -163,9 +164,10 @@ setup() {
     select_st_directory <<< "y" > /dev/null
     [ "$ST_DIR" = "$(canonical_path "${FOXIUM_ROOT}/SillyTavern")" ]
 
+    # declining the candidate falls back to manual input; q then exits there
     local status=0
     ST_DIR=""
-    select_st_directory <<< "n" > /dev/null || status=$?
+    select_st_directory <<< $'n\nq' > /dev/null || status=$?
 
     [ "$status" -ne 0 ]
     [ -z "$ST_DIR" ]

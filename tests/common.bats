@@ -74,6 +74,14 @@ setup() {
     [ "$status" -ne 0 ]
 }
 
+@test "interactive reads exit non-zero when stdin is closed instead of looping" {
+    run prompt_choice "question: " answer < /dev/null
+    [ "$status" -ne 0 ]
+
+    run ask_confirm "continue?" < /dev/null
+    [ "$status" -ne 0 ]
+}
+
 @test "insert_line_after_anchor inserts once, after the first matching anchor" {
     local file="${BATS_TEST_TMPDIR}/users.js"
     printf 'const a = 1;\nttl: false, // Never expire\nconst b = 2;\nttl: false, // Never expire\n' > "$file"
