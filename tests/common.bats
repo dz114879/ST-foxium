@@ -92,6 +92,29 @@ setup() {
     [ "$status" -eq 0 ]
 }
 
+# 调用方写完临时文件后会 mv 覆盖目标，mv 保留的是临时文件的权限位。不复制目标
+# 权限的话，mktemp 的 600 会把原文件的执行位等一起抹掉（真实 ST 上 start.sh 775
+# 曾变成 600，导致 ./start.sh 直接 Permission denied）。
+@test "make_temp_next_to copies the existing target's permission bits onto the temp file" {
+    local target="${BATS_TEST_TMPDIR}/start.sh"
+    printf '#!/usr/bin/env bash\nnode server.js\n' > "$target"
+    chmod 775 "$target"
+
+    local temp_file
+    temp_file="$(make_temp_next_to "$target")"
+
+    [ -f "$temp_file" ]
+    [ "$(stat -c '%a' "$temp_file")" = "775" ]
+}
+
+@test "make_temp_next_to leaves a brand-new target at mktemp's default permissions" {
+    local temp_file
+    temp_file="$(make_temp_next_to "${BATS_TEST_TMPDIR}/does-not-exist.sh")"
+
+    [ -f "$temp_file" ]
+    [ "$(stat -c '%a' "$temp_file")" = "600" ]
+}
+
 @test "insert_line_after_anchor inserts once, after the first matching anchor" {
     local file="${BATS_TEST_TMPDIR}/users.js"
     printf 'const a = 1;\nttl: false, // Never expire\nconst b = 2;\nttl: false, // Never expire\n' > "$file"

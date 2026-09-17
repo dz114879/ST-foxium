@@ -16,6 +16,17 @@ setup() {
     assert_backed_up "${BATS_TEST_TMPDIR}/snapshot.sh"
 }
 
+# 真实 ST 的 start.sh 是 775；改写走 mktemp + mv，若不复制权限会掉成 600，
+# 用户再启动时就 Permission denied。
+@test "update_start_script_memory_limit preserves the start script's permissions" {
+    chmod 775 "${ST_DIR}/start.sh"
+
+    update_start_script_memory_limit "${ST_DIR}/start.sh" 4096
+
+    grep -Fq -- '--max-old-space-size=4096' "${ST_DIR}/start.sh"
+    [ "$(stat -c '%a' "${ST_DIR}/start.sh")" = "775" ]
+}
+
 @test "update_start_script_memory_limit replaces an existing nonzero limit" {
     printf '#!/usr/bin/env bash\nnode --max-old-space-size=2048 server.js\n' > "${ST_DIR}/start.sh"
 

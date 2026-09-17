@@ -188,16 +188,23 @@ canonical_path() {
 
 make_temp_next_to() {
     local target="$1"
-    local target_dir
+    local target_dir temp_file
     target_dir="$(cd "$(dirname "$target")" && pwd -P)" || return 1
 
     if command_exists mktemp; then
-        mktemp "${target_dir}/.foxium.XXXXXX"
+        temp_file="$(mktemp "${target_dir}/.foxium.XXXXXX")" || return 1
     else
-        local temp_file="${target_dir}/.foxium.$$.$RANDOM"
+        temp_file="${target_dir}/.foxium.$$.$RANDOM"
         : > "$temp_file" || return 1
-        printf '%s' "$temp_file"
     fi
+
+    # 调用方最终用 mv 覆盖目标，而 mv 带走的是临时文件的权限位；mktemp 建出来
+    # 是 600，不改的话会把原文件的执行位等一起抹掉。目标已存在时先复制它的权限。
+    if [[ -e "$target" ]]; then
+        chmod --reference="$target" "$temp_file" 2>/dev/null || true
+    fi
+
+    printf '%s' "$temp_file"
 }
 
 sanitize_version_part() {

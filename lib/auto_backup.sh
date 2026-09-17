@@ -231,9 +231,6 @@ enable_auto_backup() {
 
     if insert_auto_backup_block "$target_file" "$block_file"; then
         rm -f "$block_file"
-        if [[ "$env_choice" == "1" ]]; then
-            chmod +x "$target_file" >/dev/null 2>&1 || true
-        fi
         print_success "已启用自动备份。"
     else
         rm -f "$block_file"
