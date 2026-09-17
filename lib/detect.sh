@@ -315,6 +315,12 @@ validate_user_name() {
         return 1
     fi
 
+    # 纯点名字能通过上面的字符白名单，但 "${ST_DIR}/data/.." 会被解析成
+    # ST_DIR 本身，让 USER_DIR 指向上层目录；"." 也不是有效 handle。
+    if [[ "$value" != *[!.]* ]]; then
+        return 1
+    fi
+
     return 0
 }
 

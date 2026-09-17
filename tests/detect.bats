@@ -217,7 +217,7 @@ setup() {
     # The name reaches an unquoted heredoc when the auto-backup block is
     # generated, so command substitution and path traversal must be rejected.
     local bad
-    for bad in '`id`' '$(id)' 'a;b' 'a|b' 'a&b' 'a b' 'a/b' 'a\b' '../x' $'a\nb'; do
+    for bad in '`id`' '$(id)' 'a;b' 'a|b' 'a&b' 'a b' 'a/b' 'a\b' '../x' $'a\nb' '.' '..' '...'; do
         run validate_user_name "$bad"
         [ "$status" -ne 0 ]
     done
