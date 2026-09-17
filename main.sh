@@ -1,4 +1,11 @@
 #!/usr/bin/env bash
+#
+# FFSS (Foxium V2) — SillyTavern 维护工具
+# Copyright (C) 2025-2026 KKTsN
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# 本程序是自由软件：你可以依据 GNU Affero 通用公共许可证（第 3 版或任何更新版本）
+# 重新分发和/或修改它。本程序不含任何担保，详见随附的 LICENSE 文件。
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd -P)"
 FOXIUM_ROOT="$SCRIPT_DIR"

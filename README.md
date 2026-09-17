@@ -86,3 +86,13 @@ bats tests/
 ```
 
 其中一个用例会检查 `build/ffss.sh` 是否与 `lib/` 同步。改完 `lib/` 如果忘了重新生成发布文件，它会直接失败——这是唯一会静默把旧代码发给用户的失误。
+
+---
+
+## 许可证
+
+Copyright (C) 2025-2026 KKTsN
+
+本项目以 [GNU Affero General Public License v3.0 或更新版本](LICENSE) 发布，SPDX 标识符 `AGPL-3.0-or-later`：你可以自由使用、修改和再分发，但分发修改版时必须同样以 AGPL 提供完整源码。
+
+选 AGPL-3.0 的直接原因：SillyTavern 本体即为 AGPL-3.0，而本脚本会改写它的源码（`start.sh` / `Start.bat`、`src/users.js`、`src/endpoints/characters.js`、`public/scripts/openai.js`），并直接引用其中的源码片段作为插入锚点。若只需要「版本 3、不含 or later」，把 LICENSE 保持原样、仅修改本节的 SPDX 标识符与 `main.sh` 顶部声明为 `AGPL-3.0-only` 即可。
